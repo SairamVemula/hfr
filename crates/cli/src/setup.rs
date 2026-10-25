@@ -6,7 +6,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 const INSTALL_SH: &str = include_str!("install.sh");
-const TARGET: &str = "x86_64-unknown-linux-musl";
 
 pub struct Opts {
     pub host: String,
@@ -16,23 +15,32 @@ pub struct Opts {
     pub agent: Option<PathBuf>,
 }
 
-/// Looks for the Linux agent next to the running `hfr` (target/<profile>/hfr -> target/<musl>/release)
+/// Rust target of the agent binary for a VPS CPU, from `uname -m`.
+fn rust_target(uname_m: &str) -> Result<&'static str> {
+    match uname_m.trim() {
+        "x86_64" | "amd64" => Ok("x86_64-unknown-linux-musl"),
+        "aarch64" | "arm64" => Ok("aarch64-unknown-linux-musl"),
+        other => bail!("unsupported VPS architecture `{other}` (supported: x86_64, aarch64)"),
+    }
+}
+
+/// Looks for the Linux agent next to the running `hfr` (target/<profile>/hfr -> target/<triple>/release)
 /// and in the current directory's target folder.
-fn find_agent(explicit: Option<PathBuf>) -> Result<PathBuf> {
+fn find_agent(explicit: Option<PathBuf>, triple: &str) -> Result<PathBuf> {
     if let Some(p) = explicit {
         if p.is_file() {
             return Ok(p);
         }
         bail!("agent binary not found at {}", p.display());
     }
-    let mut cands = vec![PathBuf::from("target").join(TARGET).join("release").join("hfr-agent")];
+    let mut cands = vec![PathBuf::from("target").join(triple).join("release").join("hfr-agent")];
     if let Ok(exe) = std::env::current_exe() {
         if let Some(target) = exe.parent().and_then(|p| p.parent()) {
-            cands.push(target.join(TARGET).join("release").join("hfr-agent"));
+            cands.push(target.join(triple).join("release").join("hfr-agent"));
         }
     }
     cands.into_iter().find(|p| p.is_file()).context(format!(
-        "Linux agent not found. Build it with:\n  rustup target add {TARGET}\n  cargo build -p hfr-agent --release --target {TARGET}\nor pass --agent <path>"
+        "Linux agent for this VPS not found. Build it with:\n  rustup target add {triple}\n  cargo build -p hfr-agent --release --target {triple}\nor pass --agent <path>"
     ))
 }
 
@@ -46,8 +54,22 @@ fn ssh_common(o: &Opts, port_flag: &str) -> Vec<String> {
 }
 
 pub async fn run(o: Opts) -> Result<()> {
-    let agent = find_agent(o.agent.clone())?;
     let target = format!("{}@{}", o.user, o.host);
+
+    let arch = Command::new("ssh")
+        .args(ssh_common(&o, "-p"))
+        .arg(&target)
+        .arg("uname -m")
+        .stderr(Stdio::inherit())
+        .output()
+        .await
+        .context("failed to run `ssh`")?;
+    if !arch.status.success() {
+        bail!("could not connect to {target} (is your SSH key loaded? try `ssh-add`)");
+    }
+    let triple = rust_target(&String::from_utf8_lossy(&arch.stdout))?;
+    let agent = find_agent(o.agent.clone(), triple)?;
+
 
     println!("==> Uploading agent ({}) to {target}", agent.display());
     let st = Command::new("scp")

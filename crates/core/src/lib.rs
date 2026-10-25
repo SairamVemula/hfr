@@ -47,9 +47,9 @@ pub fn config_path() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("hfr").join("config.toml")
 }
 
-/// The token lives in the OS credential store when one is available (Windows Credential Manager),
-/// and only falls back to the config file otherwise.
-#[cfg(windows)]
+/// The token lives in the OS credential store when one is available (Windows Credential Manager, macOS Keychain),
+/// and otherwise falls back to the config file, which is then restricted to the owner on Unix.
+#[cfg(any(windows, target_os = "macos"))]
 mod secret {
     fn entry() -> Option<keyring::Entry> {
         keyring::Entry::new("hfr", "agent-token").ok()
@@ -62,7 +62,7 @@ mod secret {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 mod secret {
     pub fn store(_: &str) -> bool {
         false
@@ -94,7 +94,12 @@ impl Config {
         if !self.token.is_empty() && secret::store(&self.token) {
             on_disk.token = String::new();
         }
-        std::fs::write(p, toml::to_string_pretty(&on_disk)?)?;
+        std::fs::write(&p, toml::to_string_pretty(&on_disk)?)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600))?;
+        }
         Ok(())
     }
 }

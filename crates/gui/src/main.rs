@@ -340,7 +340,7 @@ impl HfrApp {
                     .border_color(cx.theme().border)
                     .bg(cx.theme().muted)
                     .overflow_y_scroll()
-                    .font_family("Consolas")
+                    .font_family(if cfg!(target_os = "macos") { "Menlo" } else if cfg!(windows) { "Consolas" } else { "DejaVu Sans Mono" })
                     .text_sm()
                     .child(if log_text.is_empty() { "(no output yet)".to_string() } else { log_text }),
             );

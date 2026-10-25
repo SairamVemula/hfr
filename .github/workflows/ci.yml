@@ -1,0 +1,51 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  # CLI, client library, agent and protocol: must build and pass tests on every desktop OS.
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build -p hfr-proto -p hfr-core -p hfr-cli -p hfr-agent
+      - run: cargo test -p hfr-proto -p hfr-core -p hfr-cli -p hfr-agent
+
+  # GUI needs the platform's native graphics libraries.
+  gui:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-dev libxkbcommon-dev libwayland-dev libx11-xcb-dev \
+            libxcb1-dev libxcb-xkb-dev libfontconfig-dev libvulkan-dev libasound2-dev pkg-config
+      - run: cargo build -p hfr-gui
+
+  # Static Linux agents for x86_64 and ARM VPSes (pure Rust, linked with rust-lld).
+  agent-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build -p hfr-agent --release --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hfr-agent-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/hfr-agent
