@@ -1,9 +1,12 @@
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
-use hfr_core::{Client, Config};
+use hfr_core::render::{Format, HdrMode, Quality, RenderOptions};
+use hfr_core::transfer::{eta, fmt_bytes, fmt_duration, fmt_rate, SpeedMeter};
+use hfr_core::{Cancelled, Client, Config, Phase, Transfer};
 use hfr_proto::JobState;
 
 #[derive(Parser)]
@@ -49,7 +52,9 @@ enum Cmd {
     Push {
         #[arg(default_value = ".")]
         dir: PathBuf,
-        /// Command to run on the VPS, default `npx hyperframes render`.
+        #[command(flatten)]
+        opts: RenderArgs,
+        /// Advanced: the full command to run on the VPS instead of the options above (must be `npx hyperframes render ...`).
         #[arg(last = true)]
         command: Vec<String>,
     },
@@ -60,6 +65,9 @@ enum Cmd {
         /// Return right after starting instead of following logs.
         #[arg(long)]
         detach: bool,
+        #[command(flatten)]
+        opts: RenderArgs,
+        /// Advanced: the full command to run on the VPS instead of the options above.
         #[arg(last = true)]
         command: Vec<String>,
     },
@@ -100,22 +108,126 @@ fn gib(b: u64) -> String {
     format!("{:.1} GiB", b as f64 / (1u64 << 30) as f64)
 }
 
-fn default_cmd(c: Vec<String>) -> Vec<String> {
-    if c.is_empty() {
-        vec!["npx".into(), "hyperframes".into(), "render".into()]
-    } else {
-        c
+/// Render options, the same ones the desktop app offers in its dialog.
+#[derive(clap::Args, Clone, Default)]
+struct RenderArgs {
+    /// Frame rate, 1-240 (default: the composition's own rate).
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..=240))]
+    fps: Option<u32>,
+    /// Quality preset (default: looks).
+    #[arg(long, value_parser = ["draft", "looks", "delivery"])]
+    quality: Option<String>,
+    /// Output format (default: mp4).
+    #[arg(long, value_parser = ["mp4", "webm", "mov", "gif"])]
+    format: Option<String>,
+    /// Parallel Chrome workers (default: auto; each needs about 256 MB RAM).
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..=64))]
+    workers: Option<u32>,
+    /// Force HDR output.
+    #[arg(long)]
+    hdr: bool,
+    /// Force SDR output.
+    #[arg(long, conflicts_with = "hdr")]
+    sdr: bool,
+    /// Render this HTML file instead of index.html, relative to the project.
+    #[arg(long)]
+    composition: Option<String>,
+}
+
+impl RenderArgs {
+    fn options(&self) -> RenderOptions {
+        RenderOptions {
+            fps: self.fps,
+            quality: Quality::ALL.into_iter().find(|q| Some(q.flag()) == self.quality.as_deref()).unwrap_or_default(),
+            format: Format::ALL.into_iter().find(|f| Some(f.flag()) == self.format.as_deref()).unwrap_or_default(),
+            workers: self.workers,
+            hdr: if self.hdr {
+                HdrMode::Hdr
+            } else if self.sdr {
+                HdrMode::Sdr
+            } else {
+                HdrMode::Auto
+            },
+            composition: self.composition.clone(),
+        }
+    }
+
+    /// An explicit command after `--` wins over the options.
+    fn command(&self, explicit: Vec<String>) -> Vec<String> {
+        if explicit.is_empty() {
+            self.options().command()
+        } else {
+            explicit
+        }
     }
 }
 
 async fn push(c: &Client, dir: &std::path::Path, command: Vec<String>) -> Result<String> {
     let dir = dir.canonicalize()?;
     let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
-    let job = c.create_job(&name, default_cmd(command)).await?;
-    println!("job {} created, packing + uploading {} ...", job.id, dir.display());
-    let n = c.upload_dir(&job.id, &dir).await?;
-    println!("uploaded {}", gib(n));
-    Ok(job.id)
+    let job = c.create_job(&name, command).await?;
+    println!("job {} created, uploading {}", job.id, dir.display());
+
+    // Progress line (speed + ETA) and Ctrl+C to cancel.
+    let t = Transfer::new();
+    let (shown, stop) = (t.clone(), t.clone());
+    let printer = tokio::spawn(async move {
+        let tty = std::io::stdout().is_terminal();
+        let mut meter = SpeedMeter::new();
+        let (mut last_phase, mut last_pct) = (Phase::Idle, 101u32);
+        loop {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let s = shown.snapshot();
+            if s.phase != last_phase {
+                meter.reset();
+                last_phase = s.phase;
+            }
+            let bps = meter.sample(s.done);
+            let pct = (s.fraction() * 100.0) as u32;
+            let label = match s.phase {
+                Phase::Scanning => "Measuring ".to_string(),
+                Phase::Packing => "Packing   ".to_string(),
+                Phase::Uploading => "Uploading ".to_string(),
+                Phase::Finishing => "Unpacking on the VPS...".to_string(),
+                _ => continue,
+            };
+            let eta = eta(s.total, s.done, bps).map(fmt_duration).unwrap_or_else(|| "...".into());
+            let line = if matches!(s.phase, Phase::Packing | Phase::Uploading) {
+                format!("{label}{pct:>3}%  {} of {}  {}  ETA {eta}", fmt_bytes(s.done), fmt_bytes(s.total), fmt_rate(bps))
+            } else {
+                label
+            };
+            if tty {
+                print!("\r{line:<78}");
+                let _ = std::io::stdout().flush();
+            } else if pct / 10 != last_pct / 10 || last_pct == 101 {
+                println!("{line}");
+            }
+            last_pct = pct;
+        }
+    });
+    let interrupt = tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            stop.cancel();
+        }
+    });
+    let res = c.upload_dir_tracked(&job.id, &dir, t).await;
+    printer.abort();
+    interrupt.abort();
+    println!();
+    match res {
+        Ok(n) => {
+            println!("uploaded {}", fmt_bytes(n));
+            Ok(job.id)
+        }
+        Err(e) => {
+            let _ = c.remove(&job.id).await; // never leave a half-uploaded job on the VPS
+            if e.is::<Cancelled>() {
+                bail!("cancelled; nothing was kept on the VPS");
+            }
+            Err(e)
+        }
+    }
 }
 
 async fn follow(c: &Client, id: &str) -> Result<JobState> {
@@ -159,12 +271,12 @@ async fn main() -> Result<()> {
     let c = Client::connect(&Config::load()?).await?;
     match cli.cmd {
         Cmd::Init { .. } | Cmd::Setup { .. } => unreachable!(),
-        Cmd::Push { dir, command } => {
-            let id = push(&c, &dir, command).await?;
+        Cmd::Push { dir, opts, command } => {
+            let id = push(&c, &dir, opts.command(command)).await?;
             println!("{id}");
         }
-        Cmd::Render { dir, detach, command } => {
-            let id = push(&c, &dir, command).await?;
+        Cmd::Render { dir, detach, opts, command } => {
+            let id = push(&c, &dir, opts.command(command)).await?;
             c.start(&id).await?;
             println!("started {id}");
             if !detach {

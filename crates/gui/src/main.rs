@@ -1,5 +1,6 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod render_flow;
 mod theme;
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -104,6 +105,8 @@ struct HfrApp {
     key_in: Entity<InputState>,
     setup_running: bool,
     setup_log: Vec<String>,
+    new_render: Option<render_flow::NewRender>,
+    upload: Option<render_flow::UploadUi>,
     _poll: Option<Task<()>>,
 }
 
@@ -137,6 +140,8 @@ impl HfrApp {
             key_in,
             setup_running: false,
             setup_log: Vec::new(),
+            new_render: None,
+            upload: None,
             _poll: None,
         };
         app._poll = app.start_polling(cx);
@@ -255,64 +260,6 @@ impl HfrApp {
         })
         .detach();
         cx.notify();
-    }
-
-    fn push_folder(&mut self, cx: &mut Context<Self>) {
-        let Some(client) = self.client.clone() else { return };
-        let picked = cx.prompt_for_paths(PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: Some("Pick the Hyperframes project to render".into()),
-        });
-        let rt = self.rt.clone();
-        cx.spawn(async move |this, cx| {
-            let Ok(Ok(Some(paths))) = picked.await else { return };
-            let Some(dir) = paths.into_iter().next() else { return };
-            let _ = this.update(cx, |s, cx| {
-                s.status = format!("Uploading {} ...", dir.display());
-                cx.notify();
-            });
-            let out = rt
-                .spawn(async move {
-                    let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
-                    let job = client
-                        .create_job(&name, vec!["npx".into(), "hyperframes".into(), "render".into()])
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    client.upload_dir(&job.id, &dir).await.map_err(|e| e.to_string())?;
-                    client.start(&job.id).await.map_err(|e| e.to_string())?;
-                    Ok::<(String, String), String>((job.id, name))
-                })
-                .await;
-            let _ = this.update(cx, |s, cx| {
-                match out {
-                    Ok(Ok((id, name))) => {
-                        s.status = format!("Rendering {name} on the VPS");
-                        s.view = View::Jobs;
-                        s.jobs.insert(
-                            0,
-                            Job {
-                                id: id.clone(),
-                                name,
-                                state: JobState::Running,
-                                command: vec![],
-                                created_unix: std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .map(|d| d.as_secs())
-                                    .unwrap_or(0),
-                                size_bytes: 0,
-                            },
-                        );
-                        s.select(id, cx);
-                    }
-                    Ok(Err(e)) => s.status = format!("Push failed: {e}"),
-                    Err(e) => s.status = format!("Push failed: {e}"),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
     }
 
     fn pull(&mut self, id: String, cx: &mut Context<Self>) {
@@ -495,14 +442,18 @@ impl HfrApp {
                     ),
             )
             .when(connected, |d| {
-                d.child(self.nav_item("nav-jobs", IconName::Folder, "Jobs", View::Jobs, Some(self.jobs.len()), cx)).child(self.nav_item(
-                    "nav-vps",
-                    IconName::Cpu,
-                    "VPS",
-                    View::Vps,
-                    None,
+                d.child(self.nav_item(
+                    "nav-jobs",
+                    IconName::Folder,
+                    "Jobs",
+                    View::Jobs,
+                    Some({
+                        let hidden = self.uploading_job_id();
+                        self.jobs.iter().filter(|j| Some(&j.id) != hidden.as_ref()).count()
+                    }),
                     cx,
                 ))
+                .child(self.nav_item("nav-vps", IconName::Cpu, "VPS", View::Vps, None, cx))
             })
             .child(self.nav_item("nav-settings", IconName::Settings, "Settings", View::Settings, None, cx))
             .child(div().flex_1())
@@ -542,7 +493,11 @@ impl HfrApp {
 
     fn jobs_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut list = div().id("jobs").v_flex().gap_2().w(px(330.)).h_full().flex_none().overflow_y_scroll();
-        for j in &self.jobs {
+        if let Some(c) = self.upload_card(cx) {
+            list = list.child(c);
+        }
+        let hidden = self.uploading_job_id();
+        for j in self.jobs.iter().filter(|j| Some(&j.id) != hidden.as_ref()) {
             let id = j.id.clone();
             let sel = self.selected.as_deref() == Some(j.id.as_str());
             let (label, color) = state_style(j.state);
@@ -570,7 +525,7 @@ impl HfrApp {
                     .child(div().text_xs().text_color(theme::muted()).child(format!("{}  ·  {}", ago(j.created_unix), gib(j.size_bytes)))),
             );
         }
-        if self.jobs.is_empty() {
+        if self.jobs.is_empty() && self.upload.is_none() {
             list = list.child(
                 card()
                     .items_center()
@@ -628,6 +583,9 @@ impl HfrApp {
 
     fn job_detail(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let pane = div().v_flex().gap_3().flex_1().h_full().min_w_0();
+        if self.upload.is_some() && self.selected.is_none() {
+            return pane.child(self.upload_panel(cx));
+        }
         let Some(job) = self.selected.as_ref().and_then(|id| self.jobs.iter().find(|j| &j.id == id)) else {
             return pane.child(
                 card()
@@ -709,7 +667,8 @@ impl HfrApp {
             .primary()
             .icon(Icon::new(IconName::Plus))
             .label("New render")
-            .on_click(cx.listener(|t, _, _, cx| t.push_folder(cx)))
+            .disabled(self.upload.is_some() || self.new_render.is_some())
+            .on_click(cx.listener(|t, _, window, cx| t.begin_new_render(window, cx)))
             .into_any_element();
         div()
             .v_flex()
@@ -961,12 +920,14 @@ impl Render for HfrApp {
                 })))
         });
         div()
+            .relative()
             .h_flex()
             .size_full()
             .bg(theme::bg())
             .text_color(theme::fg())
             .child(self.sidebar(cx))
             .child(div().v_flex().flex_1().min_w_0().h_full().child(div().flex_1().min_h_0().child(page)).children(status))
+            .children(self.options_dialog(cx))
     }
 }
 

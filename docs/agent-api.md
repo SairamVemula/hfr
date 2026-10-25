@@ -60,7 +60,7 @@ Percentages are 0-100; sizes are bytes. `disk_*` describes the largest filesyste
 
 ## Command allowlist
 
-`POST /jobs` accepts only `npx hyperframes render` followed by recognised options (list in [cli.md](cli.md)) and optionally `.`. Values for `-o/--output`, `-c/--composition` and `--variables-file` must be relative paths without `..`, `:` or a leading slash. Commands are executed directly (no shell). Setting `HFR_ALLOW_ANY_COMMAND=1` disables this check and exists only for development.
+`POST /jobs` accepts only `npx hyperframes render` (rules in `crates/proto/src/command.rs`) followed by recognised options (list in [cli.md](cli.md)) and optionally `.`. Values for `-o/--output`, `-c/--composition` and `--variables-file` must be relative paths without `..`, `:` or a leading slash. Commands are executed directly (no shell). Setting `HFR_ALLOW_ANY_COMMAND=1` disables this check and exists only for development.
 
 ## Archive rules
 

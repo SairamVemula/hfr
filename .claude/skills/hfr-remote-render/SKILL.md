@@ -23,8 +23,12 @@ Full docs: `docs/cli.md`, `docs/troubleshooting.md`, `docs/security.md` in the r
 ```bash
 hfr render <project-dir>              # packs, uploads, starts, follows logs until done; exit code != 0 if it failed
 hfr render <project-dir> --detach     # returns right after starting; prints the job id
-hfr render <dir> -- npx hyperframes render -q delivery --fps 60 -w 2   # custom options (see the allowlist below)
+hfr render <dir> --fps 60 --quality delivery --workers 2   # options (defaults in brackets below)
 ```
+
+Options, the same ones the app's *Render options* dialog offers: `--fps <1-240>` [composition's own], `--quality draft|looks|delivery` [looks], `--format mp4|webm|mov|gif` [mp4; webm and mov keep transparency], `--workers <n>` [auto; each Chrome worker needs ~256 MB RAM, so check `hfr status` first], `--hdr` / `--sdr` [auto-detect], `--composition <file.html>` [index.html]. Leave an option out to keep Hyperframes' default; only pass what the user asked for. `-- <full command>` replaces them all (advanced).
+
+While uploading, a progress line shows percent, bytes, speed and ETA. **Ctrl+C cancels the upload** and removes the half-created job from the VPS. If you run `hfr` in the background and must stop it, terminate the process; do not leave uploads running unattended.
 
 - `<project-dir>` is the folder containing `index.html` / `hyperframes.json`.
 - Uploads skip `node_modules`, `.git` and anything in `.hfrignore` (gitignore syntax). If the project has old `renders/` or large unused footage, suggest adding them to `.hfrignore` before uploading; ask before editing user files.
@@ -82,4 +86,4 @@ More: `docs/troubleshooting.md`.
 
 ## Desktop app
 
-`hfr-gui` offers the same actions with live charts. If the user prefers a window, tell them to open **HFR Remote**: *New render* uploads a folder, the job page shows progress and logs, *Download video* with *Free VPS space after download* ticked does the pull + delete.
+`hfr-gui` offers the same actions with live charts. If the user prefers a window, tell them to open **HFR Remote**: *New render* picks a folder, shows the options dialog, uploads with a cancellable progress view, then the job page shows render progress and logs; *Download video* with *Free VPS space after download* ticked does the pull + delete.

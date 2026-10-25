@@ -40,9 +40,11 @@ cargo run -p hfr-cli -- render ./project -- echo hello
 | Task | Files |
 | --- | --- |
 | Add/change an HTTP endpoint | `crates/agent/src/main.rs` (route + handler), `crates/proto/src/lib.rs` (types), `crates/core/src/lib.rs` (`Client` method), `docs/agent-api.md` |
-| Validate input (commands, archives, tokens) | `crates/agent/src/safety.rs` **with tests** |
+| Validate input | commands: `crates/proto/src/command.rs` (allowlist, shared); archives and tokens: `crates/agent/src/safety.rs` — **always with tests** |
+| Render options (UI and CLI) | `crates/core/src/render.rs` (`RenderOptions` -> command; a test checks all choices pass the allowlist) |
+| Upload progress, cancel, speed/ETA | `crates/core/src/transfer.rs`, `Client::upload_dir_tracked` in `crates/core/src/lib.rs` |
 | Add a CLI command | `crates/cli/src/main.rs` (`Cmd` enum + match arm), `docs/cli.md` |
-| GUI screen/action | `crates/gui/src/main.rs` (`HfrApp` methods + view fns), palette in `theme.rs` |
+| GUI screen/action | `crates/gui/src/main.rs` (`HfrApp`, main views), `crates/gui/src/render_flow.rs` (new-render dialog and upload panel), palette in `theme.rs` |
 | VPS install steps | `crates/core/src/install.sh` (idempotent bash), `crates/core/src/setup.rs` |
 | Installers/CI | `Packager.toml`, `.github/workflows/{ci,release}.yml`, `scripts/` |
 
@@ -50,7 +52,7 @@ cargo run -p hfr-cli -- render ./project -- echo hello
 1. Add types to `hfr-proto` if needed. 2. Handler in `agent/main.rs`; take `Path(id)` and **look the id up in the job table before building any path**; register under the auth layer (all routes are). 3. `Client` method in `hfr-core`. 4. Use it from CLI/GUI. 5. Document in `docs/agent-api.md`; add a CHANGELOG line.
 
 ### Recipe: allow another render option
-Add it to `VALUE_FLAGS` or `BOOL_FLAGS` in `safety.rs` (and `PATH_FLAGS` if its value is a path), add a test, update `docs/cli.md`, the skill `hfr-remote-render`, and `docs/agent-api.md`.
+Add it to `VALUE_FLAGS` or `BOOL_FLAGS` in `crates/proto/src/command.rs` (and `PATH_FLAGS` if its value is a path), add a test there, then expose it in `RenderOptions` (`crates/core/src/render.rs`), the dialog in `render_flow.rs` and the CLI `RenderArgs`; update `docs/cli.md`, `docs/gui.md`, the skill `hfr-remote-render` and `docs/agent-api.md`.
 
 ## Hard rules
 
@@ -68,6 +70,8 @@ Add it to `VALUE_FLAGS` or `BOOL_FLAGS` in `safety.rs` (and `PATH_FLAGS` if its 
 - **gpui-kit:** `use gpui_kit::*` = GPUI; components in `gpui_kit::component::*`; icons `gpui_kit::assets::IconName` (only the bundled default icon set renders: check `default-icons.txt` in the `gpui-kit-assets` crate source); `Theme::update(cx, |t| t.colors.x = ...)` for colours (buttons use `button_primary*`, not `primary`); scrolling needs `.id(..)` before `.overflow_y_scroll()`; async from GPUI to tokio works by awaiting `Handle::spawn` JoinHandles.
 - **cargo-packager** only finds config with `-c Packager.toml` in this workspace; NSIS key is `installer-mode`.
 - Job state is in memory: an agent restart loses the list (known limitation).
+- **Driving the GUI from a script** (screenshots, clicks): before every click or keystroke verify the foreground window belongs to `hfr-gui` (compare `GetWindowThreadProcessId` of `GetForegroundWindow` with the app pid) and wait for `MainWindowHandle` first; otherwise input lands in whatever window the user has open. Never name a PowerShell function `Type` (alias of `Get-Content`).
+- Test uploads/renders against a real VPS only with a job you created, and delete only that job; the user may have real renders there.
 - Screenshots for docs must not contain real IPs/usernames/tokens.
 
 ## Definition of done

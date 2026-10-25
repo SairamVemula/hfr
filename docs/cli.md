@@ -28,18 +28,26 @@ Saves connection settings without installing anything (for a VPS you set up by h
 | `--token <token>` | required; the agent's `HFR_TOKEN` |
 | `--direct-url <url>` | skip the SSH tunnel and call the agent at this URL (local testing only) |
 
-### `hfr render [dir] [-- options]`
-Pack `dir` (default `.`), upload, start the render and follow it until it ends. Exits non-zero if the render failed.
+### `hfr render [dir] [options]`
+Pack `dir` (default `.`), upload it, start the render and follow it until it ends. Exits non-zero if the render failed.
 
-| Option | Meaning |
-| --- | --- |
-| `--detach` | return right after starting; follow later with `hfr logs -f` |
-| `-- <args>` | extra `npx hyperframes render` options, e.g. `-- npx hyperframes render -q delivery --fps 60` |
+While uploading it prints one progress line with speed and time left (`Uploading  42%  251.3 MB of 600.0 MB  18.4 MB/s  ETA 1m 05s`). **Ctrl+C during the upload cancels it**; the half-created job is deleted from the VPS, so nothing is left behind.
 
-Only `npx hyperframes render` with a fixed allowlist of options is accepted by the agent: `-c/--composition`, `-o/--output`, `-f/--fps`, `-q/--quality`, `--format`, `-w/--workers`, `--crf`, `--video-bitrate`, `--vp9-cpu-used`, `--variables`, `--variables-file`, `--video-frame-format`, `--gif-loop`, `--hls-segment-seconds`, `--hdr`, `--sdr`, `--quiet`, `--strict`, `--strict-all`, `--gpu`, `--browser-gpu`, `--no-browser-gpu`, `--best-effort`, `--no-best-effort`, `--strict-variables`, `--lint-verbose`. Path values (`-o`, `-c`, `--variables-file`) must be relative and inside the project.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--fps <1-240>` | composition's own (30 if unset) | Frame rate |
+| `--quality <draft\|looks\|delivery>` | `looks` (CRF 16) | Quality preset |
+| `--format <mp4\|webm\|mov\|gif>` | `mp4` | Output format (`webm` and `mov` keep transparency) |
+| `--workers <n>` | auto | Parallel Chrome workers; each needs about 256 MB RAM |
+| `--hdr` / `--sdr` | auto-detect | Force HDR or SDR |
+| `--composition <file.html>` | `index.html` | Render another HTML file of the project |
+| `--detach` | off | Return right after starting; follow later with `hfr logs -f` |
+| `-- <command...>` | | Advanced: replace all of the above with a full command, e.g. `-- npx hyperframes render -q delivery --crf 14` |
 
-### `hfr push [dir] [-- options]`
-Pack and upload only; prints the job id. Start it later with `hfr start`.
+These are exactly the choices of the desktop app's **Render options** dialog. The agent only accepts `npx hyperframes render` with a fixed allowlist of options (defined in `crates/proto/src/command.rs`): `-c/--composition`, `-o/--output`, `-f/--fps`, `-q/--quality`, `--format`, `-w/--workers`, `--crf`, `--video-bitrate`, `--vp9-cpu-used`, `--variables`, `--variables-file`, `--video-frame-format`, `--gif-loop`, `--hls-segment-seconds`, `--hdr`, `--sdr`, `--quiet`, `--strict`, `--strict-all`, `--gpu`, `--browser-gpu`, `--no-browser-gpu`, `--best-effort`, `--no-best-effort`, `--strict-variables`, `--lint-verbose`. Path values (`-o`, `-c`, `--variables-file`) must be relative and inside the project. PNG-sequence and HLS output (directories) are not supported yet.
+
+### `hfr push [dir] [options]`
+Pack and upload only, with the same options and progress line; prints the job id. Start it later with `hfr start`.
 
 ### `hfr start <job-id>`
 Start an uploaded job.

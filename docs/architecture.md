@@ -56,11 +56,13 @@ On the VPS each job lives in `$HFR_ROOT/<uuid>/` (`/var/lib/hfr/jobs/<uuid>/`):
   log.txt      stdout + stderr, appended as lines arrive
 ```
 
-Output detection: when a job is `Done`, the agent picks the **newest video file** (`mp4`, `mov`, `webm`, `mkv`) under `project/` (ignoring `node_modules`) that was modified after the job started. Hyperframes writes to `renders/` by default, so source footage in the project is never mistaken for the result.
+Render options (`crates/core/src/render.rs`) are turned into the job's command (`npx hyperframes render --fps 60 -q delivery ...`) by the client; the agent only validates it against the allowlist in `crates/proto/src/command.rs`. A unit test checks that every combination the UI can offer passes that allowlist.
+
+Output detection: when a job is `Done`, the agent picks the **newest video file** (`mp4`, `mov`, `webm`, `mkv`, `gif`) under `project/` (ignoring `node_modules`) that was modified after the job started. Hyperframes writes to `renders/` by default, so source footage in the project is never mistaken for the result.
 
 ## Upload and download
 
-- **Upload:** the client builds a tar of the project (honouring `.hfrignore`, skipping `node_modules` and `.git`, no symlinks) into a temp file and streams it as the request body. The agent streams the body to disk and extracts it in Rust, refusing links, devices and any path that is absolute or contains `..`.
+- **Upload:** the client first measures the project, then builds a tar of it (honouring `.hfrignore`, skipping `node_modules` and `.git`, no symlinks) into a temp file, then streams that file as the request body. A shared `Transfer` object (`crates/core/src/transfer.rs`) exposes the phase (measuring, packing, uploading, unpacking), bytes done and total, and a cancel token; the CLI and the app read it a few times a second and turn it into a progress bar, speed (smoothed) and time left. Cancelling stops packing or aborts the request immediately, and the caller deletes the half-created job. The agent streams the body to disk and extracts it in Rust, refusing links, devices and any path that is absolute or contains `..`.
 - **Download:** `GET output/info` returns name, size and SHA-256; the client streams `GET output` into `<name>.part`, verifies size and hash, then renames. A mismatch deletes the partial file and errors out.
 
 ## Setup flow (`hfr-core::setup`)

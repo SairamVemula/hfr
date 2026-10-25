@@ -53,5 +53,8 @@ pub struct Metrics {
     pub disk_total: u64,
 }
 
+mod command;
+pub use command::validate_command;
+
 /// File extensions the agent treats as render output.
-pub const OUTPUT_EXTS: &[&str] = &["mp4", "mov", "webm", "mkv"];
+pub const OUTPUT_EXTS: &[&str] = &["mp4", "mov", "webm", "mkv", "gif"];

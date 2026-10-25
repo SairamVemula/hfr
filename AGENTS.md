@@ -28,9 +28,9 @@ bash scripts/stage-agents.sh   # static Linux agents (x86_64 + aarch64) via rust
 
 | Path | Role |
 | --- | --- |
-| `crates/proto` | Wire types shared by agent and clients |
-| `crates/agent` | VPS service (axum). `safety.rs` = command allowlist, archive extraction, token check |
-| `crates/core` | Client library + `setup.rs` / `install.sh` (VPS installation) |
+| `crates/proto` | Wire types and the command allowlist (`command.rs`) shared by agent and clients |
+| `crates/agent` | VPS service (axum). `safety.rs` = archive extraction, token check |
+| `crates/core` | Client library, `render.rs` (options -> command), `transfer.rs` (upload progress/cancel), `setup.rs` / `install.sh` (VPS installation) |
 | `crates/cli` | `hfr` (clap) |
 | `crates/gui` | `hfr-gui` (GPUI via `gpui-kit`); `theme.rs` palette |
 | `docs/` | User and developer documentation (keep in sync with code) |

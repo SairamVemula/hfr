@@ -17,7 +17,15 @@ With no saved connection the app shows **Connect your VPS**: enter the host, the
 
 ## Jobs
 
-- **New render** picks a project folder, uploads it and starts rendering immediately.
+- **New render** walks through three steps:
+  1. Pick the Hyperframes project folder.
+  2. A **Render options** dialog opens with every field preset to Hyperframes' defaults: composition (only when the project has other HTML files), frame rate, quality, format, colour range (auto / HDR / SDR) and parallel workers (with a hint about the VPS's cores and RAM). A live line shows the exact command that will run. **Upload and render** continues; **Cancel** closes it.
+  3. The job is created and the project is packed and uploaded. The job list gets an upload card and the right pane shows a **progress bar** with *transferred / total*, **speed**, **time left** and elapsed time. **Cancel upload** stops it at any moment (while packing or sending); the half-created job is deleted from the VPS so nothing is left behind. When the last byte is sent the VPS unpacks the project and the render starts automatically, switching to the live progress view.
+<p align="center">
+  <img src="images/options.png" alt="Render options dialog" width="46%">
+  <img src="images/upload.png" alt="Upload with progress, speed and time left" width="52%">
+</p>
+
 - The list shows name, state pill (Created, Ready, Rendering, Done, Failed), age and size. Click a job to open it.
 - The detail pane has a **progress bar** with the current stage (parsed from Hyperframes' progress output) while rendering, then the **live log** (errors in red, warnings in amber, noisy progress lines hidden).
 - **Download video** saves to your Downloads folder after verifying size and SHA-256. Keep **Free VPS space after download** ticked to delete the job on the VPS in the same step.

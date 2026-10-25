@@ -5,6 +5,9 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 ## [Unreleased]
 
 ### Added
+- New render flow in the app: folder picker, **Render options** dialog (composition, frame rate, quality, format, colour range, workers; defaults preset), then an upload view with progress bar, speed, time left and **Cancel upload** (the half-created job is removed from the VPS).
+- `hfr render` / `hfr push` options (`--fps`, `--quality`, `--format`, `--workers`, `--hdr`/`--sdr`, `--composition`), an upload progress line and Ctrl+C cancel.
+- GIF output is recognised as a render result; the command allowlist moved into `hfr-proto` so clients can test against it.
 - Rust workspace: `hfr-agent` (VPS service), `hfr-core` (client library), `hfr` (CLI), `hfr-gui` (desktop app, GPUI), `hfr-proto` (shared types).
 - `hfr setup`: one-command VPS installation (agent, Node 22, ffmpeg, Chrome, hyperframes, hardened systemd service) for x86_64 and ARM64 Debian/Ubuntu.
 - Jobs: upload (tar over an SSH tunnel), render, live logs, verified download (SHA-256), delete.
