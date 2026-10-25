@@ -1,0 +1,7 @@
+[package]
+name = "hfr-gui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gpui-kit = "0.8"
