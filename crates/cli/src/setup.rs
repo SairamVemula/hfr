@@ -65,7 +65,7 @@ pub async fn run(o: Opts) -> Result<()> {
     let mut child = Command::new("ssh")
         .args(ssh_common(&o, "-p"))
         .arg(&target)
-        .arg("bash -s")
+        .arg("bash -c \"$(cat)\"") // read the whole script first so commands inside cannot eat it from stdin
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

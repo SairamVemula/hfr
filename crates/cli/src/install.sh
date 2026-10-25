@@ -13,7 +13,7 @@ export DEBIAN_FRONTEND=noninteractive
 step "Installing system packages (ffmpeg, Chrome libraries, fonts)"
 $SUDO apt-get update -qq
 ALSA=libasound2; apt-cache show libasound2t64 >/dev/null 2>&1 && ALSA=libasound2t64
-$SUDO apt-get install -y -qq ca-certificates curl gnupg tar xz-utils openssl ffmpeg fonts-liberation \
+$SUDO apt-get install -y -qq ca-certificates curl gnupg tar xz-utils openssl unzip ffmpeg fonts-liberation \
   libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
   libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 "$ALSA" >/dev/null
 
