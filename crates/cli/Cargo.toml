@@ -1,0 +1,15 @@
+[package]
+name = "hfr-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "hfr"
+path = "src/main.rs"
+
+[dependencies]
+hfr-core = { path = "../core" }
+hfr-proto = { path = "../proto" }
+tokio.workspace = true
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }

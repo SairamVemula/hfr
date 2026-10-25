@@ -1,36 +1,40 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    io::Read,
+    path::{Path as FsPath, PathBuf},
     process::Stdio,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
-    body::Bytes,
+    body::Body,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{
         sse::{Event, Sse},
         IntoResponse, Response,
     },
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use futures_util::Stream;
-use hfr_proto::{CreateJob, Job, JobState, Metrics};
+use hfr_proto::{CreateJob, Job, JobState, Metrics, OutputInfo, OUTPUT_EXTS};
+use sha2::{Digest, Sha256};
 use sysinfo::{Disks, System};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command,
-    sync::{broadcast, Mutex},
+    sync::{broadcast, mpsc, Mutex},
 };
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use tokio_util::io::ReaderStream;
 
 struct Inner {
     jobs: HashMap<String, Job>,
     logs: HashMap<String, broadcast::Sender<String>>,
+    started: HashMap<String, SystemTime>,
 }
 
 #[derive(Clone)]
@@ -44,6 +48,10 @@ type Res<T> = Result<T, (StatusCode, String)>;
 
 fn ise<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+}
+
+fn not_found() -> (StatusCode, String) {
+    (StatusCode::NOT_FOUND, "no such job or output".into())
 }
 
 fn now() -> u64 {
@@ -64,6 +72,9 @@ async fn auth(State(app): State<App>, headers: HeaderMap, req: axum::extract::Re
 }
 
 async fn create_job(State(app): State<App>, Json(req): Json<CreateJob>) -> Res<Json<Job>> {
+    if req.command.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "empty command".into()));
+    }
     let id = uuid::Uuid::new_v4().to_string();
     tokio::fs::create_dir_all(app.root.join(&id).join("project")).await.map_err(ise)?;
     let job = Job {
@@ -72,7 +83,6 @@ async fn create_job(State(app): State<App>, Json(req): Json<CreateJob>) -> Res<J
         state: JobState::Created,
         command: req.command,
         created_unix: now(),
-        output: None,
         size_bytes: 0,
     };
     let mut g = app.inner.lock().await;
@@ -88,30 +98,39 @@ async fn list_jobs(State(app): State<App>) -> Json<Vec<Job>> {
     Json(v)
 }
 
-/// Upload a tar archive (raw body); extracted into the job's project dir.
-async fn upload(State(app): State<App>, Path(id): Path<String>, body: Bytes) -> Res<StatusCode> {
+async fn get_job(State(app): State<App>, Path(id): Path<String>) -> Res<Json<Job>> {
+    app.inner.lock().await.jobs.get(&id).cloned().map(Json).ok_or_else(not_found)
+}
+
+/// Upload a tar archive (raw streamed body); extracted into the job's project dir.
+async fn upload(State(app): State<App>, Path(id): Path<String>, body: Body) -> Res<StatusCode> {
     if !app.inner.lock().await.jobs.contains_key(&id) {
-        return Err((StatusCode::NOT_FOUND, "no job".into()));
+        return Err(not_found());
     }
     let dir = app.root.join(&id);
-    let tar = dir.join("upload.tar");
-    tokio::fs::write(&tar, &body).await.map_err(ise)?;
+    let mut f = tokio::fs::File::create(dir.join("upload.tar")).await.map_err(ise)?;
+    let mut total = 0u64;
+    let mut stream = body.into_data_stream();
+    while let Some(chunk) = futures_util::StreamExt::next(&mut stream).await {
+        let chunk = chunk.map_err(ise)?;
+        total += chunk.len() as u64;
+        f.write_all(&chunk).await.map_err(ise)?;
+    }
+    f.flush().await.map_err(ise)?;
+    drop(f);
     let st = Command::new("tar")
-        .arg("-xf")
-        .arg(&tar)
-        .arg("-C")
-        .arg(dir.join("project"))
+        .args(["-xf", "upload.tar", "-C", "project"])
+        .current_dir(&dir)
         .status()
         .await
         .map_err(ise)?;
-    let _ = tokio::fs::remove_file(&tar).await;
+    let _ = tokio::fs::remove_file(dir.join("upload.tar")).await;
     if !st.success() {
         return Err(ise("tar extract failed"));
     }
-    let mut g = app.inner.lock().await;
-    if let Some(j) = g.jobs.get_mut(&id) {
+    if let Some(j) = app.inner.lock().await.jobs.get_mut(&id) {
         j.state = JobState::Uploaded;
-        j.size_bytes = body.len() as u64;
+        j.size_bytes = total;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -119,18 +138,27 @@ async fn upload(State(app): State<App>, Path(id): Path<String>, body: Bytes) -> 
 async fn start(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode> {
     let (cmd, tx) = {
         let mut g = app.inner.lock().await;
-        let j = g.jobs.get_mut(&id).ok_or((StatusCode::NOT_FOUND, "no job".into()))?;
+        let j = g.jobs.get_mut(&id).ok_or_else(not_found)?;
+        if j.state == JobState::Running {
+            return Err((StatusCode::CONFLICT, "already running".into()));
+        }
+        if j.state == JobState::Created {
+            return Err((StatusCode::CONFLICT, "nothing uploaded yet".into()));
+        }
         j.state = JobState::Running;
-        (j.command.clone(), g.logs[&id].clone())
+        let cmd = j.command.clone();
+        g.started.insert(id.clone(), SystemTime::now());
+        (cmd, g.logs[&id].clone())
     };
     let app2 = app.clone();
     tokio::spawn(async move {
         let dir = app2.root.join(&id).join("project");
-        let log_path = app2.root.join(&id).join("log.txt");
-        let mut logf = tokio::fs::File::create(&log_path).await.ok();
+        let mut logf = tokio::fs::File::create(app2.root.join(&id).join("log.txt")).await.ok();
+        let (ltx, mut lrx) = mpsc::unbounded_channel::<String>();
         let mut child = match Command::new(&cmd[0])
             .args(&cmd[1..])
             .current_dir(&dir)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -138,41 +166,43 @@ async fn start(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode
             Ok(c) => c,
             Err(e) => {
                 let _ = tx.send(format!("spawn failed: {e}"));
+                if let Some(f) = logf.as_mut() {
+                    let _ = f.write_all(format!("spawn failed: {e}\n").as_bytes()).await;
+                }
                 set_state(&app2, &id, JobState::Failed).await;
                 return;
             }
         };
-        let mut readers = Vec::new();
-        for r in [
-            child.stdout.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
-            child.stderr.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            let tx = tx.clone();
-            readers.push(tokio::spawn(async move {
-                let mut lines = BufReader::new(r).lines();
-                let mut out = Vec::new();
-                while let Ok(Some(l)) = lines.next_line().await {
-                    let _ = tx.send(l.clone());
-                    out.push(l);
-                }
-                out
-            }));
+        if let Some(s) = child.stdout.take() {
+            pump(s, ltx.clone());
         }
-        let status = child.wait().await;
-        for r in readers {
-            if let (Ok(lines), Some(f)) = (r.await, logf.as_mut()) {
-                for l in lines {
+        if let Some(s) = child.stderr.take() {
+            pump(s, ltx.clone());
+        }
+        drop(ltx);
+        // Single consumer: append to the log file and broadcast, in arrival order.
+        let writer = tokio::spawn(async move {
+            while let Some(l) = lrx.recv().await {
+                if let Some(f) = logf.as_mut() {
                     let _ = f.write_all(format!("{l}\n").as_bytes()).await;
                 }
+                let _ = tx.send(l);
             }
-        }
-        let ok = status.map(|s| s.success()).unwrap_or(false);
+        });
+        let ok = child.wait().await.map(|s| s.success()).unwrap_or(false);
+        let _ = writer.await;
         set_state(&app2, &id, if ok { JobState::Done } else { JobState::Failed }).await;
     });
     Ok(StatusCode::ACCEPTED)
+}
+
+fn pump<R: tokio::io::AsyncRead + Unpin + Send + 'static>(r: R, tx: mpsc::UnboundedSender<String>) {
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(r).lines();
+        while let Ok(Some(l)) = lines.next_line().await {
+            let _ = tx.send(l);
+        }
+    });
 }
 
 async fn set_state(app: &App, id: &str, st: JobState) {
@@ -181,30 +211,111 @@ async fn set_state(app: &App, id: &str, st: JobState) {
     }
 }
 
-async fn logs(State(app): State<App>, Path(id): Path<String>) -> Res<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>> {
-    let rx = app
-        .inner
-        .lock()
-        .await
-        .logs
-        .get(&id)
-        .ok_or((StatusCode::NOT_FOUND, "no job".into()))?
-        .subscribe();
+async fn logs_stream(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Res<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>> {
+    let rx = app.inner.lock().await.logs.get(&id).ok_or_else(not_found)?.subscribe();
     Ok(Sse::new(BroadcastStream::new(rx).filter_map(|m| m.ok()).map(|l| Ok(Event::default().data(l)))))
+}
+
+/// Full log so far (also works after the job has finished).
+async fn log_text(State(app): State<App>, Path(id): Path<String>) -> Res<String> {
+    if !app.inner.lock().await.jobs.contains_key(&id) {
+        return Err(not_found());
+    }
+    Ok(tokio::fs::read_to_string(app.root.join(&id).join("log.txt")).await.unwrap_or_default())
+}
+
+/// Newest video file under the project written since the job started.
+fn find_output(dir: &FsPath, since: SystemTime) -> Option<PathBuf> {
+    fn walk(dir: &FsPath, since: SystemTime, best: &mut Option<(SystemTime, PathBuf)>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        for e in rd.flatten() {
+            let p = e.path();
+            let Ok(md) = e.metadata() else { continue };
+            if md.is_dir() {
+                if p.file_name().map(|n| n != "node_modules").unwrap_or(true) {
+                    walk(&p, since, best);
+                }
+            } else if p
+                .extension()
+                .and_then(|x| x.to_str())
+                .map(|x| OUTPUT_EXTS.contains(&x.to_ascii_lowercase().as_str()))
+                .unwrap_or(false)
+            {
+                if let Ok(m) = md.modified() {
+                    if m >= since && best.as_ref().map(|(t, _)| m > *t).unwrap_or(true) {
+                        *best = Some((m, p));
+                    }
+                }
+            }
+        }
+    }
+    let mut best = None;
+    walk(dir, since, &mut best);
+    best.map(|(_, p)| p)
+}
+
+async fn output_path(app: &App, id: &str) -> Res<PathBuf> {
+    let since = {
+        let g = app.inner.lock().await;
+        let j = g.jobs.get(id).ok_or_else(not_found)?;
+        if j.state != JobState::Done {
+            return Err((StatusCode::CONFLICT, "job not finished successfully".into()));
+        }
+        *g.started.get(id).ok_or_else(not_found)?
+    };
+    let dir = app.root.join(id).join("project");
+    tokio::task::spawn_blocking(move || find_output(&dir, since)).await.map_err(ise)?.ok_or_else(not_found)
+}
+
+async fn output_info(State(app): State<App>, Path(id): Path<String>) -> Res<Json<OutputInfo>> {
+    let p = output_path(&app, &id).await?;
+    let info = tokio::task::spawn_blocking(move || -> std::io::Result<OutputInfo> {
+        let mut f = std::fs::File::open(&p)?;
+        let mut h = Sha256::new();
+        let mut buf = vec![0u8; 1 << 20];
+        let mut size = 0u64;
+        loop {
+            let n = f.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            size += n as u64;
+            h.update(&buf[..n]);
+        }
+        Ok(OutputInfo {
+            name: p.file_name().unwrap().to_string_lossy().into_owned(),
+            size,
+            sha256: h.finalize().iter().map(|b| format!("{b:02x}")).collect(),
+        })
+    })
+    .await
+    .map_err(ise)?
+    .map_err(ise)?;
+    Ok(Json(info))
+}
+
+async fn output_download(State(app): State<App>, Path(id): Path<String>) -> Res<Response> {
+    let p = output_path(&app, &id).await?;
+    let f = tokio::fs::File::open(&p).await.map_err(ise)?;
+    let len = f.metadata().await.map_err(ise)?.len();
+    Ok(([(header::CONTENT_LENGTH, len.to_string())], Body::from_stream(ReaderStream::new(f))).into_response())
 }
 
 async fn remove(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode> {
     {
         let mut g = app.inner.lock().await;
-        if !g.jobs.contains_key(&id) {
-            return Err((StatusCode::NOT_FOUND, "no job".into()));
-        }
-        if matches!(g.jobs.get(&id).map(|j| j.state), Some(JobState::Running)) {
+        let st = g.jobs.get(&id).map(|j| j.state).ok_or_else(not_found)?;
+        if st == JobState::Running {
             return Err((StatusCode::CONFLICT, "job is running".into()));
         }
         g.jobs.remove(&id);
         g.logs.remove(&id);
+        g.started.remove(&id);
     }
+    // id was found in the job map, so it is one of our own uuids.
     let _ = tokio::fs::remove_dir_all(app.root.join(&id)).await;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -243,14 +354,17 @@ async fn main() {
     let app = App {
         root,
         token: Arc::new(token),
-        inner: Arc::new(Mutex::new(Inner { jobs: HashMap::new(), logs: HashMap::new() })),
+        inner: Arc::new(Mutex::new(Inner { jobs: HashMap::new(), logs: HashMap::new(), started: HashMap::new() })),
     };
     let router = Router::new()
         .route("/jobs", post(create_job).get(list_jobs))
+        .route("/jobs/:id", get(get_job).delete(remove))
         .route("/jobs/:id/upload", put(upload))
         .route("/jobs/:id/start", post(start))
-        .route("/jobs/:id/logs", get(logs))
-        .route("/jobs/:id", delete(remove))
+        .route("/jobs/:id/logs", get(logs_stream))
+        .route("/jobs/:id/log", get(log_text))
+        .route("/jobs/:id/output/info", get(output_info))
+        .route("/jobs/:id/output", get(output_download))
         .route("/metrics", get(metrics))
         .layer(middleware::from_fn_with_state(app.clone(), auth))
         .layer(axum::extract::DefaultBodyLimit::disable())

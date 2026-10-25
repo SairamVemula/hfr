@@ -13,3 +13,5 @@ uuid.workspace = true
 sysinfo = "0.33"
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures-util = "0.3"
+sha2 = "0.10"
+tokio-util = { version = "0.7", features = ["io"] }

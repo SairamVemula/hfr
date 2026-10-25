@@ -5,11 +5,15 @@ use serde::{Deserialize, Serialize};
 pub enum JobState {
     Created,
     Uploaded,
-    Queued,
     Running,
     Done,
     Failed,
-    Cancelled,
+}
+
+impl JobState {
+    pub fn is_terminal(self) -> bool {
+        matches!(self, JobState::Done | JobState::Failed)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +24,6 @@ pub struct Job {
     /// Command run inside the project dir, e.g. ["npx","hyperframes","render"].
     pub command: Vec<String>,
     pub created_unix: u64,
-    pub output: Option<String>,
     pub size_bytes: u64,
 }
 
@@ -28,6 +31,13 @@ pub struct Job {
 pub struct CreateJob {
     pub name: String,
     pub command: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputInfo {
+    pub name: String,
+    pub size: u64,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,3 +52,6 @@ pub struct Metrics {
     pub disk_used: u64,
     pub disk_total: u64,
 }
+
+/// File extensions the agent treats as render output.
+pub const OUTPUT_EXTS: &[&str] = &["mp4", "mov", "webm", "mkv"];
