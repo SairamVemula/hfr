@@ -1,5 +1,3 @@
-mod setup;
-
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -9,7 +7,7 @@ use hfr_core::{Client, Config};
 use hfr_proto::JobState;
 
 #[derive(Parser)]
-#[command(name = "hfr", about = "Render Hyperframes projects on your VPS")]
+#[command(name = "hfr", version, about = "Render Hyperframes projects on your VPS")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -68,7 +66,11 @@ enum Cmd {
     /// Start an already-pushed job.
     Start { id: String },
     /// List jobs.
-    Jobs,
+    Jobs {
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show logs (`-f` to follow live).
     Logs {
         id: String,
@@ -76,7 +78,11 @@ enum Cmd {
         follow: bool,
     },
     /// VPS CPU / RAM / disk snapshot.
-    Status,
+    Status {
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
     /// Download the finished render (verified by sha256).
     Pull {
         id: String,
@@ -102,7 +108,7 @@ fn default_cmd(c: Vec<String>) -> Vec<String> {
     }
 }
 
-async fn push(c: &Client, dir: &PathBuf, command: Vec<String>) -> Result<String> {
+async fn push(c: &Client, dir: &std::path::Path, command: Vec<String>) -> Result<String> {
     let dir = dir.canonicalize()?;
     let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
     let job = c.create_job(&name, default_cmd(command)).await?;
@@ -146,7 +152,9 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     if let Cmd::Setup { host, user, key, ssh_port, agent } = cli.cmd {
-        return setup::run(setup::Opts { host, user, key, ssh_port, agent }).await;
+        hfr_core::setup::run(hfr_core::setup::Opts { host, user, key, ssh_port, agent }, |l| println!("{l}")).await?;
+        println!("Setup complete. Try: hfr render <project-dir>");
+        return Ok(());
     }
     let c = Client::connect(&Config::load()?).await?;
     match cli.cmd {
@@ -173,8 +181,13 @@ async fn main() -> Result<()> {
             c.start(&id).await?;
             println!("started {id}");
         }
-        Cmd::Jobs => {
-            for j in c.jobs().await? {
+        Cmd::Jobs { json } => {
+            let jobs = c.jobs().await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&jobs)?);
+                return Ok(());
+            }
+            for j in jobs {
                 println!("{}  {:<8?}  {:>9}  {}", j.id, j.state, gib(j.size_bytes), j.name);
             }
         }
@@ -185,8 +198,12 @@ async fn main() -> Result<()> {
                 print!("{}", c.log_text(&id).await?);
             }
         }
-        Cmd::Status => {
+        Cmd::Status { json } => {
             let m = c.metrics().await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&m)?);
+                return Ok(());
+            }
             println!("CPU  {:.0}%  ({} cores, load {:.2})", m.cpu_total, m.cpu_cores.len(), m.load1);
             println!("RAM  {} / {}", gib(m.mem_used), gib(m.mem_total));
             println!("Swap {} / {}", gib(m.swap_used), gib(m.swap_total));

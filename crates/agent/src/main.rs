@@ -63,11 +63,7 @@ fn now() -> u64 {
 }
 
 async fn auth(State(app): State<App>, headers: HeaderMap, req: axum::extract::Request, next: Next) -> Response {
-    let ok = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| safety::token_matches(v, &app.token))
-        .unwrap_or(false);
+    let ok = headers.get("authorization").and_then(|v| v.to_str().ok()).map(|v| safety::token_matches(v, &app.token)).unwrap_or(false);
     if ok {
         next.run(req).await
     } else {
@@ -85,14 +81,7 @@ async fn create_job(State(app): State<App>, Json(req): Json<CreateJob>) -> Res<J
     }
     let id = uuid::Uuid::new_v4().to_string();
     tokio::fs::create_dir_all(app.root.join(&id).join("project")).await.map_err(ise)?;
-    let job = Job {
-        id: id.clone(),
-        name: req.name,
-        state: JobState::Created,
-        command: req.command,
-        created_unix: now(),
-        size_bytes: 0,
-    };
+    let job = Job { id: id.clone(), name: req.name, state: JobState::Created, command: req.command, created_unix: now(), size_bytes: 0 };
     let mut g = app.inner.lock().await;
     g.jobs.insert(id.clone(), job.clone());
     g.logs.insert(id, broadcast::channel(1024).0);
@@ -329,11 +318,8 @@ async fn metrics() -> Json<Metrics> {
     sys.refresh_cpu_usage();
     sys.refresh_memory();
     let disks = Disks::new_with_refreshed_list();
-    let (du, dt) = disks
-        .iter()
-        .max_by_key(|d| d.total_space())
-        .map(|d| (d.total_space() - d.available_space(), d.total_space()))
-        .unwrap_or((0, 0));
+    let (du, dt) =
+        disks.iter().max_by_key(|d| d.total_space()).map(|d| (d.total_space() - d.available_space(), d.total_space())).unwrap_or((0, 0));
     Json(Metrics {
         cpu_total: sys.global_cpu_usage(),
         cpu_cores: sys.cpus().iter().map(|c| c.cpu_usage()).collect(),

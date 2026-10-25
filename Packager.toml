@@ -1,0 +1,43 @@
+# Installer config for cargo-packager (https://github.com/crabnebula-dev/cargo-packager).
+# Build first:  cargo build --release -p hfr-cli -p hfr-gui
+# Stage agents: see scripts/stage-agents.sh (copies the musl agents into dist/agents)
+# Package:      cargo packager --release -c Packager.toml --formats nsis   (Windows)
+#               cargo packager --release -c Packager.toml --formats dmg    (macOS)
+#               cargo packager --release -c Packager.toml --formats appimage,deb   (Linux)
+name = "hfr-remote"
+product-name = "HFR Remote"
+version = "0.1.0"
+identifier = "dev.hfr.remote"
+description = "Render Hyperframes projects on your own VPS"
+long-description = "Push a Hyperframes project to your VPS, watch the render and the server's health live, download the verified video, and free the space - from a desktop app or the hfr command line."
+authors = ["Sairam Vemula and HFR Remote contributors"]
+homepage = "https://github.com/SairamVemula/hfr"
+license-file = "LICENSE"
+out-dir = "dist/installers"
+binaries-dir = "target/release"
+icons = [
+  "assets/branding/icon.ico",
+  "assets/branding/icon.icns",
+  "assets/branding/icon-256.png",
+  "assets/branding/icon-512.png",
+]
+
+[[binaries]]
+path = "hfr-gui"
+main = true
+
+[[binaries]]
+path = "hfr"
+
+# The Linux agents that `hfr setup` uploads to the VPS.
+[[resources]]
+src = "dist/agents/x86_64-unknown-linux-musl/hfr-agent"
+target = "agents/x86_64-unknown-linux-musl/hfr-agent"
+
+[[resources]]
+src = "dist/agents/aarch64-unknown-linux-musl/hfr-agent"
+target = "agents/aarch64-unknown-linux-musl/hfr-agent"
+
+[nsis]
+installer-icon = "assets/branding/icon.ico"
+installer-mode = "currentUser"

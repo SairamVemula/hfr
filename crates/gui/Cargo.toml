@@ -2,6 +2,8 @@
 name = "hfr-gui"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 hfr-core = { path = "../core" }
@@ -9,3 +11,7 @@ hfr-proto = { path = "../proto" }
 gpui-kit = "0.8"
 tokio.workspace = true
 dirs = "5"
+serde_json.workspace = true
+
+[build-dependencies]
+winresource = "0.1"

@@ -1,0 +1,41 @@
+name: release
+# Push a tag like v0.1.0 to build installers for every OS and attach them to a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            formats: nsis
+          - os: macos-latest
+            formats: dmg
+          - os: ubuntu-latest
+            formats: appimage,deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-dev libxkbcommon-dev libwayland-dev libx11-xcb-dev \
+            libxcb1-dev libxcb-xkb-dev libfontconfig-dev libvulkan-dev libasound2-dev pkg-config
+      - name: Build and stage the Linux agents (bundled so `hfr setup` works offline)
+        shell: bash
+        run: scripts/stage-agents.sh
+      - run: cargo build --release -p hfr-cli -p hfr-gui
+      - run: cargo install cargo-packager --locked
+      - run: cargo packager --release -c Packager.toml --formats ${{ matrix.formats }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/installers/*
+          generate_release_notes: true

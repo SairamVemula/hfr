@@ -2,6 +2,8 @@
 name = "hfr-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "hfr"
@@ -12,4 +14,8 @@ hfr-core = { path = "../core" }
 hfr-proto = { path = "../proto" }
 tokio.workspace = true
 anyhow = "1"
+serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }
+
+[build-dependencies]
+winresource = "0.1"

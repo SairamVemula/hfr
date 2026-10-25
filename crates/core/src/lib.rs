@@ -75,8 +75,7 @@ mod secret {
 impl Config {
     pub fn load() -> Result<Config> {
         let p = config_path();
-        let s = std::fs::read_to_string(&p)
-            .with_context(|| format!("no config at {} - run `hfr init` first", p.display()))?;
+        let s = std::fs::read_to_string(&p).with_context(|| format!("no config at {} - run `hfr init` first", p.display()))?;
         let mut cfg: Config = toml::from_str(&s)?;
         if cfg.token.is_empty() {
             cfg.token = secret::fetch().context("token not found in the credential store - run `hfr setup` or `hfr init` again")?;
@@ -129,7 +128,7 @@ impl Client {
         if let Some(u) = &cfg.direct_url {
             return Ok(Client { http, base: u.trim_end_matches('/').into(), token: cfg.token.clone(), _tunnel: Tunnel(None) });
         }
-        let mut cmd = tokio::process::Command::new("ssh");
+        let mut cmd = command("ssh");
         cmd.args(["-N", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=20", "-o", "BatchMode=yes"])
             .arg("-L")
             .arg(format!("127.0.0.1:{}:127.0.0.1:{}", cfg.local_port, cfg.remote_port))
@@ -294,4 +293,15 @@ fn pack(dir: &Path, out: &Path) -> Result<()> {
     }
     b.into_inner()?.into_inner().map_err(|e| e.into_error())?;
     Ok(())
+}
+
+pub mod setup;
+
+/// A child-process command that never flashes a console window when launched from a GUI on Windows.
+pub fn command(program: &str) -> tokio::process::Command {
+    #[allow(unused_mut)]
+    let mut c = tokio::process::Command::new(program);
+    #[cfg(windows)]
+    c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    c
 }

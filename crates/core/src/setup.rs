@@ -1,9 +1,11 @@
+//! One-time VPS installation: uploads the agent, runs the installer script, saves the config.
+
 use std::{path::PathBuf, process::Stdio};
 
 use anyhow::{bail, Context, Result};
-use hfr_core::{Client, Config};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
+
+use crate::{command, Client, Config};
 
 const INSTALL_SH: &str = include_str!("install.sh");
 
@@ -24,8 +26,7 @@ fn rust_target(uname_m: &str) -> Result<&'static str> {
     }
 }
 
-/// Looks for the Linux agent next to the running `hfr` (target/<profile>/hfr -> target/<triple>/release)
-/// and in the current directory's target folder.
+/// Finds the Linux agent: next to an installed app (`agents/<triple>/hfr-agent`), or in a cargo target folder.
 fn find_agent(explicit: Option<PathBuf>, triple: &str) -> Result<PathBuf> {
     if let Some(p) = explicit {
         if p.is_file() {
@@ -33,10 +34,19 @@ fn find_agent(explicit: Option<PathBuf>, triple: &str) -> Result<PathBuf> {
         }
         bail!("agent binary not found at {}", p.display());
     }
+    let rel = PathBuf::from(triple).join("hfr-agent");
     let mut cands = vec![PathBuf::from("target").join(triple).join("release").join("hfr-agent")];
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(target) = exe.parent().and_then(|p| p.parent()) {
-            cands.push(target.join(triple).join("release").join("hfr-agent"));
+        if let Some(dir) = exe.parent() {
+            cands.push(dir.join("agents").join(&rel));
+            cands.push(dir.join("resources").join("agents").join(&rel));
+            cands.push(dir.join("../Resources/agents").join(&rel)); // macOS .app
+            cands.push(dir.join("../lib/hfr-remote/agents").join(&rel)); // Linux packages
+            cands.push(dir.join("../lib/hfr-gui/agents").join(&rel));
+            if let Some(target) = dir.parent() {
+                cands.push(target.join(triple).join("release").join("hfr-agent"));
+                // target/debug/hfr -> target/<triple>
+            }
         }
     }
     cands.into_iter().find(|p| p.is_file()).context(format!(
@@ -45,7 +55,15 @@ fn find_agent(explicit: Option<PathBuf>, triple: &str) -> Result<PathBuf> {
 }
 
 fn ssh_common(o: &Opts, port_flag: &str) -> Vec<String> {
-    let mut a = vec![port_flag.into(), o.ssh_port.to_string(), "-o".into(), "StrictHostKeyChecking=accept-new".into()];
+    // BatchMode: never block on a password prompt (the GUI has no terminal); keys come from ssh-agent.
+    let mut a = vec![
+        port_flag.into(),
+        o.ssh_port.to_string(),
+        "-o".into(),
+        "StrictHostKeyChecking=accept-new".into(),
+        "-o".into(),
+        "BatchMode=yes".into(),
+    ];
     if let Some(k) = &o.key {
         a.push("-i".into());
         a.push(k.clone());
@@ -53,38 +71,41 @@ fn ssh_common(o: &Opts, port_flag: &str) -> Vec<String> {
     a
 }
 
-pub async fn run(o: Opts) -> Result<()> {
+/// Installs everything on the VPS and saves the connection config. `log` receives progress lines.
+pub async fn run(o: Opts, mut log: impl FnMut(String)) -> Result<Config> {
     let target = format!("{}@{}", o.user, o.host);
 
-    let arch = Command::new("ssh")
+    log(format!("==> Connecting to {target}"));
+    let arch = command("ssh")
         .args(ssh_common(&o, "-p"))
         .arg(&target)
         .arg("uname -m")
-        .stderr(Stdio::inherit())
         .output()
         .await
-        .context("failed to run `ssh`")?;
+        .context("failed to run `ssh` (is OpenSSH installed?)")?;
     if !arch.status.success() {
-        bail!("could not connect to {target} (is your SSH key loaded? try `ssh-add`)");
+        bail!(
+            "could not connect to {target}: {}\nMake sure your SSH key is loaded (`ssh-add`) and the host/user are right.",
+            String::from_utf8_lossy(&arch.stderr).trim()
+        );
     }
     let triple = rust_target(&String::from_utf8_lossy(&arch.stdout))?;
     let agent = find_agent(o.agent.clone(), triple)?;
 
-
-    println!("==> Uploading agent ({}) to {target}", agent.display());
-    let st = Command::new("scp")
+    log(format!("==> Uploading agent ({})", agent.display()));
+    let up = command("scp")
         .args(ssh_common(&o, "-P"))
         .arg(&agent)
         .arg(format!("{target}:/tmp/hfr-agent-upload"))
-        .status()
+        .output()
         .await
         .context("failed to run `scp`")?;
-    if !st.success() {
-        bail!("scp failed ({st})");
+    if !up.status.success() {
+        bail!("scp failed: {}", String::from_utf8_lossy(&up.stderr).trim());
     }
 
-    println!("==> Running installer on the VPS (this takes a few minutes the first time)");
-    let mut child = Command::new("ssh")
+    log("==> Running installer on the VPS (a few minutes the first time)".into());
+    let mut child = command("ssh")
         .args(ssh_common(&o, "-p"))
         .arg(&target)
         .arg("bash -c \"$(cat)\"") // read the whole script first so commands inside cannot eat it from stdin
@@ -102,7 +123,7 @@ pub async fn run(o: Opts) -> Result<()> {
     while let Some(l) = lines.next_line().await? {
         match l.strip_prefix("HFR_TOKEN=") {
             Some(t) => token = Some(t.trim().to_string()),
-            None => println!("{l}"),
+            None => log(l),
         }
     }
     let _ = writer.await;
@@ -114,12 +135,11 @@ pub async fn run(o: Opts) -> Result<()> {
 
     let cfg = Config { host: o.host, user: o.user, key: o.key, ssh_port: o.ssh_port, token, ..Config::default() };
     cfg.save()?;
-    println!("==> Saved {}", hfr_core::config_path().display());
+    log(format!("==> Saved {}", crate::config_path().display()));
 
-    println!("==> Verifying the SSH tunnel and agent");
+    log("==> Verifying the SSH tunnel and agent".into());
     let c = Client::connect(&cfg).await?;
     let m = c.metrics().await?;
-    println!("VPS reachable: {} cores, {:.1} GiB RAM", m.cpu_cores.len(), m.mem_total as f64 / (1u64 << 30) as f64);
-    println!("Setup complete. Try: hfr render <project-dir>");
-    Ok(())
+    log(format!("VPS reachable: {} cores, {:.1} GiB RAM", m.cpu_cores.len(), m.mem_total as f64 / (1u64 << 30) as f64));
+    Ok(cfg)
 }

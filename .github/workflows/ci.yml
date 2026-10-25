@@ -14,6 +14,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build -p hfr-proto -p hfr-core -p hfr-cli -p hfr-agent
       - run: cargo test -p hfr-proto -p hfr-core -p hfr-cli -p hfr-agent
+      - run: cargo clippy -p hfr-proto -p hfr-core -p hfr-cli -p hfr-agent -- -D warnings
 
   # GUI needs the platform's native graphics libraries.
   gui:
@@ -49,3 +50,10 @@ jobs:
         with:
           name: hfr-agent-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/hfr-agent
+
+  # Docs that an agent will trust must not drift: the mirrored skills must match skills/.
+  skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/sync-skills.sh --check

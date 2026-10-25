@@ -2,33 +2,39 @@
 # Runs on the VPS (Debian/Ubuntu) as root or via passwordless sudo. Idempotent.
 # Expects the agent binary already uploaded to /tmp/hfr-agent-upload.
 set -euo pipefail
+exec 2>&1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none
+LOG=/tmp/hfr-install.log
+: > "$LOG"
+# Run a noisy command quietly; show the end of its output only if it fails.
+quiet() { "$@" >>"$LOG" 2>&1 || { echo "FAILED: $*"; tail -n 25 "$LOG"; return 1; }; }
 
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
 step() { echo "==> $*"; }
 
 command -v apt-get >/dev/null || { echo "only Debian/Ubuntu is supported by this installer" >&2; exit 1; }
-export DEBIAN_FRONTEND=noninteractive
 
 step "Installing system packages (ffmpeg, Chrome libraries, fonts)"
-$SUDO apt-get update -qq
+quiet $SUDO apt-get update -qq
 ALSA=libasound2; apt-cache show libasound2t64 >/dev/null 2>&1 && ALSA=libasound2t64
-$SUDO apt-get install -y -qq ca-certificates curl gnupg tar xz-utils openssl unzip ffmpeg fonts-liberation \
+quiet $SUDO apt-get install -y -qq ca-certificates curl gnupg tar xz-utils openssl unzip ffmpeg fonts-liberation \
   libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-  libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 "$ALSA" >/dev/null
+  libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 "$ALSA"
 
 NODE_MAJOR=0
 if command -v node >/dev/null; then NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]'); fi
 if [ "$NODE_MAJOR" -lt 22 ]; then
   step "Installing Node.js 22"
-  curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash - >/dev/null
-  $SUDO apt-get install -y -qq nodejs >/dev/null
+  curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource.sh
+  quiet ${SUDO:+$SUDO -E} bash /tmp/nodesource.sh
+  quiet $SUDO apt-get install -y -qq nodejs
 else
   step "Node.js $(node -v) already present"
 fi
 
 step "Installing hyperframes"
-$SUDO npm install -g hyperframes >/dev/null 2>&1
+quiet $SUDO npm install -g hyperframes
 
 step "Creating service user and directories"
 id hfr >/dev/null 2>&1 || $SUDO useradd --system --create-home --home-dir /var/lib/hfr --shell /usr/sbin/nologin hfr

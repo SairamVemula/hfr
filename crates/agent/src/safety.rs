@@ -5,13 +5,39 @@ use std::path::{Component, Path};
 use sha2::{Digest, Sha256};
 
 const VALUE_FLAGS: &[&str] = &[
-    "-c", "--composition", "-o", "--output", "-f", "--fps", "-q", "--quality", "--format", "-w", "--workers", "--crf",
-    "--video-bitrate", "--vp9-cpu-used", "--variables", "--variables-file", "--video-frame-format", "--gif-loop",
+    "-c",
+    "--composition",
+    "-o",
+    "--output",
+    "-f",
+    "--fps",
+    "-q",
+    "--quality",
+    "--format",
+    "-w",
+    "--workers",
+    "--crf",
+    "--video-bitrate",
+    "--vp9-cpu-used",
+    "--variables",
+    "--variables-file",
+    "--video-frame-format",
+    "--gif-loop",
     "--hls-segment-seconds",
 ];
 const BOOL_FLAGS: &[&str] = &[
-    "--hdr", "--sdr", "--quiet", "--strict", "--strict-all", "--gpu", "--browser-gpu", "--no-browser-gpu",
-    "--best-effort", "--no-best-effort", "--strict-variables", "--lint-verbose",
+    "--hdr",
+    "--sdr",
+    "--quiet",
+    "--strict",
+    "--strict-all",
+    "--gpu",
+    "--browser-gpu",
+    "--no-browser-gpu",
+    "--best-effort",
+    "--no-best-effort",
+    "--strict-variables",
+    "--lint-verbose",
 ];
 /// Flags whose value is a path inside the project; it must stay relative and inside the project.
 const PATH_FLAGS: &[&str] = &["-c", "--composition", "-o", "--output", "--variables-file"];
