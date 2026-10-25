@@ -31,6 +31,8 @@ use tokio::{
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tokio_util::io::ReaderStream;
 
+mod safety;
+
 struct Inner {
     jobs: HashMap<String, Job>,
     logs: HashMap<String, broadcast::Sender<String>>,
@@ -41,6 +43,8 @@ struct Inner {
 struct App {
     root: PathBuf,
     token: Arc<String>,
+    /// Dev/test only (HFR_ALLOW_ANY_COMMAND=1): skip the `npx hyperframes render` allowlist.
+    allow_any_command: bool,
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -62,17 +66,21 @@ async fn auth(State(app): State<App>, headers: HeaderMap, req: axum::extract::Re
     let ok = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
-        .map(|v| v == format!("Bearer {}", app.token))
+        .map(|v| safety::token_matches(v, &app.token))
         .unwrap_or(false);
     if ok {
         next.run(req).await
     } else {
+        // Slow down guessing; legitimate clients never hit this path.
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         StatusCode::UNAUTHORIZED.into_response()
     }
 }
 
 async fn create_job(State(app): State<App>, Json(req): Json<CreateJob>) -> Res<Json<Job>> {
-    if req.command.is_empty() {
+    if !app.allow_any_command {
+        safety::validate_command(&req.command).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    } else if req.command.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "empty command".into()));
     }
     let id = uuid::Uuid::new_v4().to_string();
@@ -118,16 +126,10 @@ async fn upload(State(app): State<App>, Path(id): Path<String>, body: Body) -> R
     }
     f.flush().await.map_err(ise)?;
     drop(f);
-    let st = Command::new("tar")
-        .args(["-xf", "upload.tar", "-C", "project"])
-        .current_dir(&dir)
-        .status()
-        .await
-        .map_err(ise)?;
+    let (tar_path, dest) = (dir.join("upload.tar"), dir.join("project"));
+    let res = tokio::task::spawn_blocking(move || safety::extract_safe(&tar_path, &dest)).await.map_err(ise)?;
     let _ = tokio::fs::remove_file(dir.join("upload.tar")).await;
-    if !st.success() {
-        return Err(ise("tar extract failed"));
-    }
+    res.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     if let Some(j) = app.inner.lock().await.jobs.get_mut(&id) {
         j.state = JobState::Uploaded;
         j.size_bytes = total;
@@ -354,6 +356,7 @@ async fn main() {
     let app = App {
         root,
         token: Arc::new(token),
+        allow_any_command: std::env::var("HFR_ALLOW_ANY_COMMAND").map(|v| v == "1").unwrap_or(false),
         inner: Arc::new(Mutex::new(Inner { jobs: HashMap::new(), logs: HashMap::new(), started: HashMap::new() })),
     };
     let router = Router::new()

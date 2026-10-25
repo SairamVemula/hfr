@@ -17,3 +17,6 @@ ignore = "0.4"
 sha2 = "0.10"
 dirs = "5"
 toml = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }

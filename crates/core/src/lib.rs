@@ -18,6 +18,7 @@ pub struct Config {
     pub user: String,
     pub key: Option<String>,
     pub ssh_port: u16,
+    #[serde(default)]
     pub token: String,
     /// Port the agent listens on, on the VPS (127.0.0.1).
     pub remote_port: u16,
@@ -46,18 +47,54 @@ pub fn config_path() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("hfr").join("config.toml")
 }
 
+/// The token lives in the OS credential store when one is available (Windows Credential Manager),
+/// and only falls back to the config file otherwise.
+#[cfg(windows)]
+mod secret {
+    fn entry() -> Option<keyring::Entry> {
+        keyring::Entry::new("hfr", "agent-token").ok()
+    }
+    pub fn store(token: &str) -> bool {
+        entry().map(|e| e.set_password(token).is_ok()).unwrap_or(false)
+    }
+    pub fn fetch() -> Option<String> {
+        entry()?.get_password().ok()
+    }
+}
+
+#[cfg(not(windows))]
+mod secret {
+    pub fn store(_: &str) -> bool {
+        false
+    }
+    pub fn fetch() -> Option<String> {
+        None
+    }
+}
+
 impl Config {
     pub fn load() -> Result<Config> {
         let p = config_path();
         let s = std::fs::read_to_string(&p)
             .with_context(|| format!("no config at {} - run `hfr init` first", p.display()))?;
-        Ok(toml::from_str(&s)?)
+        let mut cfg: Config = toml::from_str(&s)?;
+        if cfg.token.is_empty() {
+            cfg.token = secret::fetch().context("token not found in the credential store - run `hfr setup` or `hfr init` again")?;
+        } else if secret::store(&cfg.token) {
+            // Migrate a plaintext token from an older config into the credential store.
+            cfg.save()?;
+        }
+        Ok(cfg)
     }
 
     pub fn save(&self) -> Result<()> {
         let p = config_path();
         std::fs::create_dir_all(p.parent().unwrap())?;
-        std::fs::write(p, toml::to_string_pretty(self)?)?;
+        let mut on_disk = self.clone();
+        if !self.token.is_empty() && secret::store(&self.token) {
+            on_disk.token = String::new();
+        }
+        std::fs::write(p, toml::to_string_pretty(&on_disk)?)?;
         Ok(())
     }
 }

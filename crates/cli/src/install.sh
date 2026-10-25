@@ -63,6 +63,17 @@ Environment=HFR_ADDR=127.0.0.1:7878
 EnvironmentFile=/etc/hfr/agent.env
 ExecStart=/usr/local/bin/hfr-agent
 Restart=on-failure
+# Hardening: the agent only needs to write under /var/lib/hfr (job data, Chrome cache) and its private /tmp.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hfr
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
 
 [Install]
 WantedBy=multi-user.target
