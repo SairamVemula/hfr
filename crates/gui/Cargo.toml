@@ -4,4 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+hfr-core = { path = "../core" }
+hfr-proto = { path = "../proto" }
 gpui-kit = "0.8"
+tokio.workspace = true
+dirs = "5"

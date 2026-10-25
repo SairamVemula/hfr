@@ -2963,7 +2963,11 @@ dependencies = [
 name = "hfr-gui"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "gpui-kit",
+ "hfr-core",
+ "hfr-proto",
+ "tokio",
 ]
 
 [[package]]
