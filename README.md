@@ -34,7 +34,8 @@ flowchart LR
 1. **`hfr setup`** (or the app's first-run screen) installs a small agent plus Node, ffmpeg, Chrome and `hyperframes` on the VPS over SSH.
 2. **Render:** pick the folder, choose options (frame rate, quality, format, workers) in a dialog, and watch the upload with speed and time left (cancellable). The agent then renders it.
 3. **Watch:** logs stream live, with a progress bar and CPU / memory / disk charts of the VPS.
-4. **Download and clean up:** the video comes back with a SHA-256 check, and the job folder can be deleted in the same step to free your SSD.
+4. **Change your mind:** cancel a render, or re-render the same project with other options, without uploading it again.
+5. **Download and clean up:** the video comes back with a SHA-256 check, and the job folder can be deleted in the same step to free your SSD.
 
 ## Quick start
 

@@ -8,11 +8,13 @@ pub enum JobState {
     Running,
     Done,
     Failed,
+    /// Stopped by the user while it was running.
+    Cancelled,
 }
 
 impl JobState {
     pub fn is_terminal(self) -> bool {
-        matches!(self, JobState::Done | JobState::Failed)
+        matches!(self, JobState::Done | JobState::Failed | JobState::Cancelled)
     }
 }
 
@@ -30,6 +32,12 @@ pub struct Job {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateJob {
     pub name: String,
+    pub command: Vec<String>,
+}
+
+/// Run a job again with another command, reusing the uploaded project. A running render is cancelled first.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerunRequest {
     pub command: Vec<String>,
 }
 

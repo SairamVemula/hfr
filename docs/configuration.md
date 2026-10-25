@@ -48,7 +48,7 @@ Files skipped: `node_modules/`, `.git/`, and anything matched by a `.hfrignore` 
 | `/usr/local/bin/hfr-agent` | The agent binary |
 | `/etc/systemd/system/hfr-agent.service` | Service unit (runs as user `hfr`, hardened) |
 | `/etc/hfr/agent.env` | `HFR_TOKEN=...`, mode `0640`, owner `root:hfr` |
-| `/var/lib/hfr/jobs/<id>/` | One folder per job: `project/`, `log.txt` |
+| `/var/lib/hfr/jobs/<id>/` | One folder per job: `project/`, `log.txt`, `meta.json` (saved job state; lets the agent restore its job list after a restart) |
 | `/var/lib/hfr/.cache/hyperframes/` | Chrome download used for rendering |
 
 Service management: `sudo systemctl status hfr-agent`, `sudo journalctl -u hfr-agent -f`, `sudo systemctl restart hfr-agent`.
@@ -63,6 +63,10 @@ Service management: `sudo systemctl status hfr-agent`, `sudo journalctl -u hfr-a
 | `HFR_ALLOW_ANY_COMMAND` | unset | `1` disables the command allowlist. Development only |
 
 To change one under systemd: `sudo systemctl edit hfr-agent` and add `[Service]` / `Environment=...`.
+
+### Client environment variable
+
+`HFR_CONFIG=<path>` makes `hfr` and the app read and write that config file instead of the default one. A config that sets `direct_url` never touches the OS credential store, so a throw-away test setup cannot overwrite your real token. Intended for development and tests.
 
 ### Rotating the token
 

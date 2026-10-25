@@ -32,6 +32,13 @@ impl SelectItem for Opt {
 type Sel = Entity<SelectState<Vec<Opt>>>;
 
 /// The options dialog while it is open.
+/// A job already on the VPS that the dialog will re-run instead of uploading anything.
+#[derive(Clone)]
+struct RerunTarget {
+    job_id: String,
+    running: bool,
+}
+
 pub struct NewRender {
     dir: PathBuf,
     name: String,
@@ -43,6 +50,10 @@ pub struct NewRender {
     comp: Sel,
     has_comps: bool,
     cores: usize,
+    /// Composition and unrecognised options of the job being re-run, kept as they are.
+    kept_comp: Option<String>,
+    extra: Vec<String>,
+    rerun: Option<RerunTarget>,
     mem_total: u64,
 }
 
@@ -91,7 +102,8 @@ impl NewRender {
                 "sdr" => HdrMode::Sdr,
                 _ => HdrMode::Auto,
             },
-            composition: (!comp.is_empty()).then_some(comp),
+            composition: if self.has_comps { (!comp.is_empty()).then_some(comp) } else { self.kept_comp.clone() },
+            extra: self.extra.clone(),
         }
     }
 }
@@ -116,18 +128,61 @@ impl HfrApp {
         .detach();
     }
 
-    /// Step 2: the options dialog, every field preset to Hyperframes' own defaults.
+    /// Step 2: the options dialog for a new project, every field preset to Hyperframes' own defaults.
     fn open_options(&mut self, dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
+        let comps = find_compositions(&dir);
+        let mut comp = vec![(String::new(), "index.html (default)".to_string())];
+        comp.extend(comps.iter().filter(|c| c.as_str() != "index.html").map(|c| (c.clone(), c.clone())));
+        self.show_dialog(name, dir, &RenderOptions::default(), comp, None, window, cx);
+    }
+
+    /// The same dialog for a job that is already on the VPS: pre-filled with what it uses now, nothing is uploaded again.
+    pub fn open_rerun(&mut self, job_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.new_render.is_some() || self.upload.is_some() {
+            return;
+        }
+        let Some(job) = self.jobs.iter().find(|j| j.id == job_id) else { return };
+        let (name, running) = (job.name.clone(), job.state == JobState::Running);
+        let current = RenderOptions::from_command(&job.command);
+        self.show_dialog(name, PathBuf::new(), &current, vec![], Some(RerunTarget { job_id, running }), window, cx);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn show_dialog(
+        &mut self,
+        name: String,
+        dir: PathBuf,
+        initial: &RenderOptions,
+        comp: Vec<(String, String)>,
+        rerun: Option<RerunTarget>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let cores = self.metrics.as_ref().map(|m| m.cpu_cores.len()).filter(|c| *c > 0).unwrap_or(4);
         let mem_total = self.metrics.as_ref().map(|m| m.mem_total).unwrap_or(0);
 
         let mut fps = vec![("auto".to_string(), "Auto (from the composition, usually 30)".to_string())];
         fps.extend(FPS_CHOICES.iter().map(|f| (f.to_string(), format!("{f} fps"))));
+        let fps_idx = match initial.fps {
+            None => 0,
+            Some(f) => FPS_CHOICES.iter().position(|c| *c == f).map(|p| p + 1).unwrap_or_else(|| {
+                fps.push((f.to_string(), format!("{f} fps (current)")));
+                fps.len() - 1
+            }),
+        };
         let quality = Quality::ALL.iter().map(|q| (q.flag().to_string(), q.label().to_string())).collect();
         let format = Format::ALL.iter().map(|f| (f.flag().to_string(), f.label().to_string())).collect();
         let mut workers = vec![("auto".to_string(), "Auto (recommended)".to_string())];
         workers.extend((1..=cores.min(16)).map(|w| (w.to_string(), if w == 1 { "1 worker".into() } else { format!("{w} workers") })));
+        let workers_idx = match initial.workers {
+            None => 0,
+            Some(w) if (w as usize) <= cores.min(16) && w >= 1 => w as usize,
+            Some(w) => {
+                workers.push((w.to_string(), format!("{w} workers (current)")));
+                workers.len() - 1
+            }
+        };
         let hdr = HdrMode::ALL
             .iter()
             .map(|h| {
@@ -142,19 +197,19 @@ impl HfrApp {
                 )
             })
             .collect();
-        let comps = find_compositions(&dir);
-        let mut comp = vec![(String::new(), "index.html (default)".to_string())];
-        comp.extend(comps.iter().filter(|c| c.as_str() != "index.html").map(|c| (c.clone(), c.clone())));
 
         self.new_render = Some(NewRender {
             name,
             has_comps: comp.len() > 1,
-            fps: make_sel(window, cx, fps, 0),
-            quality: make_sel(window, cx, quality, 1),
-            format: make_sel(window, cx, format, 0),
-            workers: make_sel(window, cx, workers, 0),
-            hdr: make_sel(window, cx, hdr, 0),
-            comp: make_sel(window, cx, comp, 0),
+            fps: make_sel(window, cx, fps, fps_idx),
+            quality: make_sel(window, cx, quality, Quality::ALL.iter().position(|q| *q == initial.quality).unwrap_or(1)),
+            format: make_sel(window, cx, format, Format::ALL.iter().position(|f| *f == initial.format).unwrap_or(0)),
+            workers: make_sel(window, cx, workers, workers_idx),
+            hdr: make_sel(window, cx, hdr, HdrMode::ALL.iter().position(|h| *h == initial.hdr).unwrap_or(0)),
+            comp: make_sel(window, cx, if comp.is_empty() { vec![(String::new(), "index.html (default)".into())] } else { comp }, 0),
+            kept_comp: initial.composition.clone(),
+            extra: initial.extra.clone(),
+            rerun,
             dir,
             cores,
             mem_total,
@@ -167,12 +222,56 @@ impl HfrApp {
         cx.notify();
     }
 
+    /// Stop a running render. The project stays on the VPS, so it can be re-rendered with other options.
+    pub fn cancel_render(&mut self, id: String, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        self.confirm_cancel = false;
+        self.run_action("Cancel", cx, async move {
+            client.cancel(&id).await.map_err(|e| e.to_string())?;
+            Ok("Render cancelled. Use \"Re-render with other options\" to try again without uploading.".to_string())
+        });
+    }
+
+    /// Re-run a job that is already on the VPS (stopping it first when it is running).
+    fn confirm_rerun(&mut self, target: RerunTarget, command: Vec<String>, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        let rt = self.rt.clone();
+        self.status = if target.running { "Stopping the render and restarting it...".into() } else { "Restarting the render...".into() };
+        let id = target.job_id;
+        let shown = command.clone();
+        cx.spawn(async move |this, cx| {
+            let (c, i) = (client, id.clone());
+            let res = rt.spawn(async move { c.rerun(&i, command).await.map_err(|e| e.to_string()) }).await;
+            let _ = this.update(cx, |s, cx| {
+                match res {
+                    Ok(Ok(())) => {
+                        s.status = "Render restarted with the new options".into();
+                        if let Some(j) = s.jobs.iter_mut().find(|j| j.id == id) {
+                            j.state = JobState::Running;
+                            j.command = shown;
+                        }
+                        s.select(id, cx);
+                    }
+                    Ok(Err(e)) => s.status = format!("Could not restart the render: {e}"),
+                    Err(e) => s.status = format!("Could not restart the render: {e}"),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     /// Step 3: create the job, upload with progress, start it.
     pub fn confirm_options(&mut self, cx: &mut Context<Self>) {
         let Some(nr) = self.new_render.take() else { return };
         let Some(client) = self.client.clone() else { return };
         let opts = nr.options(cx);
         let command = opts.command();
+        if let Some(target) = nr.rerun.clone() {
+            self.confirm_rerun(target, command, cx);
+            return;
+        }
         let transfer = Transfer::new();
         let job_id: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
         self.upload = Some(UploadUi {
@@ -314,10 +413,18 @@ impl HfrApp {
             if nr.mem_total > 0 { gib(nr.mem_total) } else { "unknown RAM".into() }
         );
         let half = |label: &str, hint: &str, sel: &Sel| field(label, hint.to_string(), sel).flex_1().min_w_0();
+        let rerun = nr.rerun.clone();
+        let (title, subtitle) = match &rerun {
+            Some(_) => (
+                "Change render options".to_string(),
+                format!("{}  ·  the project is already on the VPS, nothing is uploaded again", nr.name),
+            ),
+            None => ("Render options".to_string(), format!("{}  ·  {}", nr.name, nr.dir.display())),
+        };
         let header = div()
             .v_flex()
-            .child(div().text_xl().font_bold().text_color(theme::fg()).child("Render options"))
-            .child(div().text_sm().text_color(theme::muted()).truncate().child(format!("{}  ·  {}", nr.name, nr.dir.display())));
+            .child(div().text_xl().font_bold().text_color(theme::fg()).child(title))
+            .child(div().text_sm().text_color(theme::muted()).truncate().child(subtitle));
         let body = div()
             .id("options-body")
             .v_flex()
@@ -346,13 +453,27 @@ impl HfrApp {
                     .font_family(mono())
                     .text_color(theme::muted())
                     .child(opts.command().join(" ")),
-            );
+            )
+            .when(rerun.as_ref().is_some_and(|r| r.running), |d| {
+                d.child(div().text_sm().text_color(theme::warning()).child(
+                    "The running render will be stopped and started again with these options. Frames rendered so far are discarded.",
+                ))
+            });
         let footer = div()
             .h_flex()
             .justify_end()
             .gap_2()
             .child(Button::new("opt-cancel").label("Cancel").on_click(cx.listener(|t, _, _, cx| t.close_options(cx))))
-            .child(Button::new("opt-go").primary().label("Upload and render").on_click(cx.listener(|t, _, _, cx| t.confirm_options(cx))));
+            .child(
+                Button::new("opt-go")
+                    .primary()
+                    .label(match &rerun {
+                        Some(r) if r.running => "Stop and restart",
+                        Some(_) => "Restart render",
+                        None => "Upload and render",
+                    })
+                    .on_click(cx.listener(|t, _, _, cx| t.confirm_options(cx))),
+            );
         let card = div()
             .id("options-dialog")
             .v_flex()

@@ -75,6 +75,7 @@ fn state_style(s: JobState) -> (&'static str, Hsla) {
         JobState::Running => ("Rendering", theme::accent()),
         JobState::Done => ("Done", theme::success()),
         JobState::Failed => ("Failed", theme::danger()),
+        JobState::Cancelled => ("Cancelled", theme::warning()),
     }
 }
 
@@ -100,6 +101,7 @@ struct HfrApp {
     log_task: Option<Task<()>>,
     delete_after_pull: bool,
     confirm_delete: bool,
+    confirm_cancel: bool,
     host_in: Entity<InputState>,
     user_in: Entity<InputState>,
     key_in: Entity<InputState>,
@@ -135,6 +137,7 @@ impl HfrApp {
             log_task: None,
             delete_after_pull: true,
             confirm_delete: false,
+            confirm_cancel: false,
             host_in,
             user_in,
             key_in,
@@ -191,6 +194,7 @@ impl HfrApp {
         self.selected = Some(id.clone());
         self.logs.clear();
         self.confirm_delete = false;
+        self.confirm_cancel = false;
         let running = self.jobs.iter().find(|j| j.id == id).map(|j| !j.state.is_terminal()).unwrap_or(false);
         let rt = self.rt.clone();
         self.log_task = Some(cx.spawn(async move |this, cx| {
@@ -314,7 +318,7 @@ impl HfrApp {
         self.setup_running = true;
         self.setup_log = vec![format!("Starting setup on {user}@{host} ...")];
         let rt = self.rt.clone();
-        let opts = setup::Opts { host, user, key: (!key.is_empty()).then_some(key), ssh_port: 22, agent: None };
+        let opts = setup::Opts { host, user, key: (!key.is_empty()).then_some(key), ssh_port: 22, agent: None, force: false };
         cx.spawn(async move |this, cx| {
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
             let task = rt.spawn(async move {
@@ -552,6 +556,8 @@ impl HfrApp {
                 theme::danger()
             } else if lower.contains("warn") {
                 theme::warning()
+            } else if l.starts_with("== ") {
+                theme::warning()
             } else if l.starts_with("==>") || l.starts_with('◇') {
                 theme::accent()
             } else if l.contains("[INFO]") || l.starts_with("npm notice") {
@@ -617,6 +623,28 @@ impl HfrApp {
                         cx.notify();
                     }),
                 ));
+        }
+        if job.state == JobState::Running {
+            let i = id.clone();
+            actions = actions.child(if self.confirm_cancel {
+                Button::new("cancel2")
+                    .danger()
+                    .label("Really stop the render?")
+                    .on_click(cx.listener(move |t, _, _, cx| t.cancel_render(i.clone(), cx)))
+            } else {
+                Button::new("cancel").label("Cancel render").on_click(cx.listener(|t, _, _, cx| {
+                    t.confirm_cancel = true;
+                    cx.notify();
+                }))
+            });
+        }
+        if matches!(job.state, JobState::Running | JobState::Done | JobState::Failed | JobState::Cancelled) {
+            // The project is already on the VPS, so another render needs no new upload.
+            let i = id.clone();
+            let label = if job.state == JobState::Running { "Change options and restart" } else { "Re-render with other options" };
+            actions = actions.child(
+                Button::new("rerun").label(label).on_click(cx.listener(move |t, _, window, cx| t.open_rerun(i.clone(), window, cx))),
+            );
         }
         if job.state != JobState::Running {
             let i = id.clone();

@@ -42,8 +42,9 @@ bash scripts/stage-agents.sh   # static Linux agents (x86_64 + aarch64) via rust
 2. **No C/TLS dependencies in client or agent**: the agent must keep cross-compiling to static musl with `rust-lld`; the client only speaks HTTP over the SSH tunnel.
 3. **Don't push, publish, tag or release** unless the user explicitly asks. Don't touch the user's VPS (`hfr setup`, `hfr rm`, sudoers) without explicit approval.
 4. **Docs and CHANGELOG** change with behavior. API changes go in [docs/agent-api.md](docs/agent-api.md) and `crates/proto`.
-5. **Windows quirks:** test `ssh` from PowerShell (Git Bash's ssh cannot see the Windows ssh-agent); use `MSYS_NO_PATHCONV=1` in Git Bash when passing `/c`-style args.
-6. Finish builds before editing files they compile; don't leave `target/` locked by a running `hfr-gui.exe`.
+5. **The installer must never disturb a running render or change an existing token.** `crates/core/src/install.sh` is idempotent and runs as the SSH user: test files under `/etc/hfr` and `/var/lib/hfr` with `$SUDO`, postpone agent/hyperframes upgrades while a job is running, and keep the token the running agent uses. Details in the `hfr-remote-develop` skill.
+6. **Windows quirks:** test `ssh` from PowerShell (Git Bash's ssh cannot see the Windows ssh-agent); use `MSYS_NO_PATHCONV=1` in Git Bash when passing `/c`-style args.
+7. Finish builds before editing files they compile; don't leave `target/` locked by a running `hfr-gui.exe`.
 
 ## Useful entry points for an LLM
 

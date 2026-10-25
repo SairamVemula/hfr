@@ -43,8 +43,20 @@ While uploading, a progress line shows percent, bytes, speed and ETA. **Ctrl+C c
 [{"id":"14511aaa-...","name":"my-project","state":"running","command":["npx","hyperframes","render"],"created_unix":1792960606,"size_bytes":12345678}]
 ```
 
-`state`: `created` -> `uploaded` -> `running` -> `done` | `failed`.
+`state`: `created` -> `uploaded` -> `running` -> `done` | `failed` | `cancelled`.
 `hfr logs <id>` prints the whole log; `hfr logs <id> -f` follows a running job. Progress lines look like `@hf-progress {"code":"capture","pct":55}`.
+
+## Cancelling and re-rendering
+
+```bash
+hfr cancel <id>                                  # stop a running render (whole process tree); job becomes "cancelled"
+hfr rerun <id> --quality delivery --fps 60       # run the same job again with other options, NO re-upload
+hfr rerun <id> --workers 2 --detach              # unspecified options keep the job's current values
+```
+
+- `rerun` works on running, done, failed and cancelled jobs; for a running job it cancels first. It reuses the project already on the VPS, so it is the right tool for "that looked wrong, try again at 60 fps" or "it ran out of memory, use fewer workers". Do not re-upload with `hfr render` for that.
+- **Only cancel or restart a render the user asked you to.** A cancelled render loses its progress, and a VPS may be running the user's other renders; check `hfr jobs --json` and never touch a job you did not start.
+- A render that was running when the agent restarted shows as `failed`; use `rerun` to start it again.
 
 ## Getting the result (and freeing space)
 
@@ -60,6 +72,8 @@ hfr rm <id>                            # delete without downloading
 - Report the saved file path and size to the user when done.
 
 ## Setup (only when asked, and only with the user's go-ahead)
+
+`hfr setup` is safe to re-run: it checks what is already installed and only installs or upgrades what is missing or outdated. It will not upgrade the agent or hyperframes while a render is running (it says "postponed"); do not work around that, tell the user to re-run when the render is done. `--force` reinstalls everything and should only be used when the user asks.
 
 `hfr setup --host <ip> --user <user> [--key <path>]` installs Node 22, ffmpeg, Chrome libraries, `hyperframes` and the agent on the VPS **as root** (Debian/Ubuntu only; x86_64 or ARM64). It needs the user's SSH key loaded in ssh-agent and root or passwordless sudo. This changes a server: confirm the host and user with the user first, and never edit sudoers or any server file yourself unless explicitly told to.
 

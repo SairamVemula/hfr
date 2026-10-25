@@ -60,7 +60,7 @@ hfr setup --host 203.0.113.10 --user you
 
 Or open **HFR Remote**: the first-run screen asks for the same three things (host, user, optional key file).
 
-What it does, step by step: detects the VPS CPU type, uploads the matching static agent, installs ffmpeg + Chrome libraries + Node 22 + `hyperframes`, creates an unprivileged `hfr` user and a hardened systemd service, generates a random token, saves the connection locally, and checks the tunnel. It is safe to re-run (it keeps your token and jobs).
+What it does, step by step: detects the VPS CPU type, uploads the matching static agent, installs ffmpeg + Chrome libraries + Node 22 + `hyperframes`, creates an unprivileged `hfr` user and a hardened systemd service, generates a random token, saves the connection locally, and checks the tunnel. It is safe to re-run: every step first checks what is already there and only installs what is missing or outdated, so a second run changes nothing and takes seconds. It keeps your token and jobs, and it never interrupts a running render: upgrades that could do so are postponed until the VPS is idle (`hfr setup --force` reinstalls everything).
 
 ## 5. Render something
 

@@ -20,23 +20,26 @@ use axum::{
     Json, Router,
 };
 use futures_util::Stream;
-use hfr_proto::{CreateJob, Job, JobState, Metrics, OutputInfo, OUTPUT_EXTS};
+use hfr_proto::{CreateJob, Job, JobState, Metrics, OutputInfo, RerunRequest, OUTPUT_EXTS};
 use sha2::{Digest, Sha256};
 use sysinfo::{Disks, System};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command,
-    sync::{broadcast, mpsc, Mutex},
+    sync::{broadcast, mpsc, oneshot, Mutex},
 };
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tokio_util::io::ReaderStream;
 
 mod safety;
+mod store;
 
 struct Inner {
     jobs: HashMap<String, Job>,
     logs: HashMap<String, broadcast::Sender<String>>,
     started: HashMap<String, SystemTime>,
+    /// Sending on this stops the running render of that job.
+    cancel_tx: HashMap<String, oneshot::Sender<()>>,
 }
 
 #[derive(Clone)]
@@ -82,9 +85,12 @@ async fn create_job(State(app): State<App>, Json(req): Json<CreateJob>) -> Res<J
     let id = uuid::Uuid::new_v4().to_string();
     tokio::fs::create_dir_all(app.root.join(&id).join("project")).await.map_err(ise)?;
     let job = Job { id: id.clone(), name: req.name, state: JobState::Created, command: req.command, created_unix: now(), size_bytes: 0 };
-    let mut g = app.inner.lock().await;
-    g.jobs.insert(id.clone(), job.clone());
-    g.logs.insert(id, broadcast::channel(1024).0);
+    {
+        let mut g = app.inner.lock().await;
+        g.jobs.insert(id.clone(), job.clone());
+        g.logs.insert(id.clone(), broadcast::channel(1024).0);
+    }
+    persist(&app, &id).await;
     Ok(Json(job))
 }
 
@@ -123,11 +129,19 @@ async fn upload(State(app): State<App>, Path(id): Path<String>, body: Body) -> R
         j.state = JobState::Uploaded;
         j.size_bytes = total;
     }
+    persist(&app, &id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn start(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode> {
-    let (cmd, tx) = {
+    start_job(&app, &id).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// Marks the job running and spawns its command in the background.
+async fn start_job(app: &App, id: &str) -> Res<()> {
+    let id = id.to_string();
+    let (cmd, tx, mut cancel_rx) = {
         let mut g = app.inner.lock().await;
         let j = g.jobs.get_mut(&id).ok_or_else(not_found)?;
         if j.state == JobState::Running {
@@ -139,27 +153,29 @@ async fn start(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode
         j.state = JobState::Running;
         let cmd = j.command.clone();
         g.started.insert(id.clone(), SystemTime::now());
-        (cmd, g.logs[&id].clone())
+        let (ctx, crx) = oneshot::channel::<()>();
+        g.cancel_tx.insert(id.clone(), ctx);
+        (cmd, g.logs[&id].clone(), crx)
     };
+    persist(app, &id).await;
     let app2 = app.clone();
     tokio::spawn(async move {
         let dir = app2.root.join(&id).join("project");
         let mut logf = tokio::fs::File::create(app2.root.join(&id).join("log.txt")).await.ok();
         let (ltx, mut lrx) = mpsc::unbounded_channel::<String>();
-        let mut child = match Command::new(&cmd[0])
-            .args(&cmd[1..])
-            .current_dir(&dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
+        let mut command = Command::new(&cmd[0]);
+        command.args(&cmd[1..]).current_dir(&dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        // Own process group, so cancelling stops npx, node, Chrome and ffmpeg together.
+        #[cfg(unix)]
+        command.process_group(0);
+        let mut child = match command.spawn() {
             Ok(c) => c,
             Err(e) => {
                 let _ = tx.send(format!("spawn failed: {e}"));
                 if let Some(f) = logf.as_mut() {
                     let _ = f.write_all(format!("spawn failed: {e}\n").as_bytes()).await;
                 }
+                app2.inner.lock().await.cancel_tx.remove(&id);
                 set_state(&app2, &id, JobState::Failed).await;
                 return;
             }
@@ -170,6 +186,7 @@ async fn start(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode
         if let Some(s) = child.stderr.take() {
             pump(s, ltx.clone());
         }
+        let note = ltx.clone();
         drop(ltx);
         // Single consumer: append to the log file and broadcast, in arrival order.
         let writer = tokio::spawn(async move {
@@ -180,10 +197,104 @@ async fn start(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode
                 let _ = tx.send(l);
             }
         });
-        let ok = child.wait().await.map(|s| s.success()).unwrap_or(false);
+        let mut cancelled = false;
+        let ok = tokio::select! {
+            s = child.wait() => s.map(|s| s.success()).unwrap_or(false),
+            _ = &mut cancel_rx => {
+                cancelled = true;
+                let _ = note.send("== render cancelled by the user ==".into());
+                terminate(&mut child).await;
+                false
+            }
+        };
+        drop(note);
         let _ = writer.await;
-        set_state(&app2, &id, if ok { JobState::Done } else { JobState::Failed }).await;
+        app2.inner.lock().await.cancel_tx.remove(&id);
+        let state = if cancelled {
+            JobState::Cancelled
+        } else if ok {
+            JobState::Done
+        } else {
+            JobState::Failed
+        };
+        set_state(&app2, &id, state).await;
     });
+    Ok(())
+}
+
+/// Stops the render and everything it started: SIGTERM to the process group, SIGKILL after a grace period.
+async fn terminate(child: &mut tokio::process::Child) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        // SAFETY: plain signal delivery to the process group created with process_group(0).
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGTERM);
+        }
+        if tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await.is_err() {
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
+    }
+    // No-op when the process is already gone; the only mechanism on non-Unix systems.
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+}
+
+/// Stop a running render.
+async fn cancel(State(app): State<App>, Path(id): Path<String>) -> Res<StatusCode> {
+    cancel_running(&app, &id).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn cancel_running(app: &App, id: &str) -> Res<()> {
+    let tx = {
+        let mut g = app.inner.lock().await;
+        if !g.jobs.contains_key(id) {
+            return Err(not_found());
+        }
+        g.cancel_tx.remove(id)
+    };
+    match tx {
+        Some(tx) => {
+            let _ = tx.send(());
+            Ok(())
+        }
+        None => Err((StatusCode::CONFLICT, "job is not running".into())),
+    }
+}
+
+/// Run the job again with a different command, reusing the project already on the VPS.
+/// A running render is cancelled first.
+async fn rerun(State(app): State<App>, Path(id): Path<String>, Json(req): Json<RerunRequest>) -> Res<StatusCode> {
+    if !app.allow_any_command {
+        safety::validate_command(&req.command).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    } else if req.command.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "empty command".into()));
+    }
+    let running = {
+        let g = app.inner.lock().await;
+        g.jobs.get(&id).ok_or_else(not_found)?.state == JobState::Running
+    };
+    if running {
+        cancel_running(&app, &id).await?;
+        let mut stopped = false;
+        for _ in 0..200 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            if app.inner.lock().await.jobs.get(&id).map(|j| j.state != JobState::Running).unwrap_or(true) {
+                stopped = true;
+                break;
+            }
+        }
+        if !stopped {
+            return Err(ise("the running render did not stop in time"));
+        }
+    }
+    if let Some(j) = app.inner.lock().await.jobs.get_mut(&id) {
+        j.command = req.command;
+    }
+    persist(&app, &id).await;
+    start_job(&app, &id).await?;
     Ok(StatusCode::ACCEPTED)
 }
 
@@ -199,6 +310,19 @@ fn pump<R: tokio::io::AsyncRead + Unpin + Send + 'static>(r: R, tx: mpsc::Unboun
 async fn set_state(app: &App, id: &str, st: JobState) {
     if let Some(j) = app.inner.lock().await.jobs.get_mut(id) {
         j.state = st;
+    }
+    persist(app, id).await;
+}
+
+/// Saves the job's metadata so it survives an agent restart.
+async fn persist(app: &App, id: &str) {
+    let (job, started) = {
+        let g = app.inner.lock().await;
+        (g.jobs.get(id).cloned(), g.started.get(id).copied())
+    };
+    if let Some(job) = job {
+        let root = app.root.clone();
+        let _ = tokio::task::spawn_blocking(move || store::save(&root, &job, started)).await;
     }
 }
 
@@ -339,17 +463,29 @@ async fn main() {
     let token = std::env::var("HFR_TOKEN").expect("set HFR_TOKEN");
     let addr = std::env::var("HFR_ADDR").unwrap_or_else(|_| "127.0.0.1:7878".into());
     tokio::fs::create_dir_all(&root).await.unwrap();
+    // Jobs saved by an earlier run (finished renders waiting to be downloaded, etc.).
+    let mut inner = Inner { jobs: HashMap::new(), logs: HashMap::new(), started: HashMap::new(), cancel_tx: HashMap::new() };
+    for (job, started) in store::load_all(&root) {
+        inner.logs.insert(job.id.clone(), broadcast::channel(1024).0);
+        if let Some(t) = started {
+            inner.started.insert(job.id.clone(), t);
+        }
+        inner.jobs.insert(job.id.clone(), job);
+    }
+    println!("restored {} job(s) from disk", inner.jobs.len());
     let app = App {
         root,
         token: Arc::new(token),
         allow_any_command: std::env::var("HFR_ALLOW_ANY_COMMAND").map(|v| v == "1").unwrap_or(false),
-        inner: Arc::new(Mutex::new(Inner { jobs: HashMap::new(), logs: HashMap::new(), started: HashMap::new() })),
+        inner: Arc::new(Mutex::new(inner)),
     };
     let router = Router::new()
         .route("/jobs", post(create_job).get(list_jobs))
         .route("/jobs/:id", get(get_job).delete(remove))
         .route("/jobs/:id/upload", put(upload))
         .route("/jobs/:id/start", post(start))
+        .route("/jobs/:id/cancel", post(cancel))
+        .route("/jobs/:id/rerun", post(rerun))
         .route("/jobs/:id/logs", get(logs_stream))
         .route("/jobs/:id/log", get(log_text))
         .route("/jobs/:id/output/info", get(output_info))

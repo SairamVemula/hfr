@@ -15,6 +15,8 @@ pub struct Opts {
     pub key: Option<String>,
     pub ssh_port: u16,
     pub agent: Option<PathBuf>,
+    /// Reinstall everything even when it is already present and up to date.
+    pub force: bool,
 }
 
 /// Rust target of the agent binary for a VPS CPU, from `uname -m`.
@@ -113,7 +115,10 @@ pub async fn run(o: Opts, mut log: impl FnMut(String)) -> Result<Config> {
         .stdout(Stdio::piped())
         .spawn()
         .context("failed to run `ssh`")?;
-    let script = INSTALL_SH.replace('\r', "");
+    let mut script = INSTALL_SH.replace('\r', "");
+    if o.force {
+        script = format!("export HFR_FORCE=1\n{script}");
+    }
     let mut stdin = child.stdin.take().unwrap();
     let writer = tokio::spawn(async move {
         let _ = stdin.write_all(script.as_bytes()).await;

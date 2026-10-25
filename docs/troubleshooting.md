@@ -59,9 +59,17 @@ Size or SHA-256 differed from what the VPS reported (interrupted transfer). The 
 
 The tunnel dropped (laptop sleep, network change). Restart the app; it reconnects at startup. Your renders keep running on the VPS.
 
-## Jobs disappeared after restarting the agent
+## Setup says "agent update postponed"
 
-Job state is in memory ([limitations](architecture.md#known-limitations)). The folders are still in `/var/lib/hfr/jobs/`; the video can be copied out with `scp` and the folder removed with `sudo rm -rf`.
+Intentional. Replacing the agent restarts it, which would stop a render that is running, and restarting an agent from before job metadata was saved would drop its existing jobs from the list. Setup therefore skips the agent (and hyperframes) upgrade while a render is running or while jobs from the previous agent version are still on the VPS. Finish or cancel the render, download or delete the old jobs (`hfr pull <id> --delete`, `hfr rm <id>`), then run `hfr setup` again. `hfr setup --force` reinstalls everything regardless.
+
+## A cancelled render left processes behind
+
+It should not: cancel stops the whole process group (SIGTERM, then SIGKILL after 5 s). Check with `ssh vps "ps -u hfr -o pid,etime,args"`; if something survives, `sudo pkill -u hfr chrome` and please report it.
+
+## Jobs missing after restarting the agent
+
+Agents from before job metadata was saved forgot their job list on restart; the folders are still in `/var/lib/hfr/jobs/` and the video can be copied out with `scp` (the folder removed with `sudo rm -rf`). Current agents save `meta.json` per job and restore the list on start; a render that was running at that moment is shown as failed.
 
 ## Disk is filling up
 

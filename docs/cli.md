@@ -9,7 +9,7 @@ hfr <command> [options]
 ## Commands
 
 ### `hfr setup`
-One-time (and upgrade) installation on the VPS. See [getting-started.md](getting-started.md#4-install-the-agent-on-the-vps).
+Installs everything on the VPS, and upgrades it later. **Safe to re-run:** each step first checks what is already there and only installs what is missing or outdated (system packages, Node 22, hyperframes, Chrome, the agent). It never interrupts a running render: while a render is running, or while jobs from an older agent version are still on the VPS, the hyperframes and agent upgrades are postponed with a note, and the next run picks them up. See [getting-started.md](getting-started.md#4-install-the-agent-on-the-vps).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ One-time (and upgrade) installation on the VPS. See [getting-started.md](getting
 | `--key <path>` | ssh-agent | Private key file to pass as `ssh -i` |
 | `--ssh-port <n>` | `22` | SSH port |
 | `--agent <path>` | auto | Linux `hfr-agent` binary to upload. Auto-detected for the VPS CPU from the installed app's bundled copy or `target/<triple>/release/` |
+| `--force` | off | Reinstall everything even if it is already installed and up to date |
 
 ### `hfr init`
 Saves connection settings without installing anything (for a VPS you set up by hand, or for local testing).
@@ -51,6 +52,17 @@ Pack and upload only, with the same options and progress line; prints the job id
 
 ### `hfr start <job-id>`
 Start an uploaded job.
+
+### `hfr cancel <job-id>`
+Stop a running render. The agent stops the whole process tree (npx, node, Chrome workers, ffmpeg), the job becomes **cancelled**, and the project stays on the VPS so you can render it again without uploading. Cancelling a job that is not running returns an error.
+
+### `hfr rerun <job-id> [options]`
+Run an existing job again with different options, **without uploading the project again**. A running render is cancelled first. Accepts the same options as `hfr render` (`--fps`, `--quality`, `--format`, `--workers`, `--hdr`/`--sdr`, `--composition`, `--detach`, `-- <command...>`); options you leave out keep the value the job already has, including hand-written extras such as `--crf 14`. It follows the new run's logs unless `--detach` is given.
+
+```bash
+hfr rerun 14511aaa-... --quality delivery            # same job, better quality
+hfr rerun 14511aaa-... --fps 60 --workers 2 --detach
+```
 
 ### `hfr jobs [--json]`
 List jobs: id, state, size, name. `--json` prints the raw job objects (fields in [agent-api.md](agent-api.md#job)).

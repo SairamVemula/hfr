@@ -98,6 +98,8 @@ pub struct RenderOptions {
     pub hdr: HdrMode,
     /// Project-relative HTML file; `None` = `index.html`.
     pub composition: Option<String>,
+    /// Command-line tokens this struct does not model, kept verbatim (see `from_command`).
+    pub extra: Vec<String>,
 }
 
 impl RenderOptions {
@@ -124,7 +126,38 @@ impl RenderOptions {
         if let Some(comp) = &self.composition {
             c.extend(["-c".into(), comp.clone()]);
         }
+        c.extend(self.extra.iter().cloned());
         c
+    }
+}
+
+impl RenderOptions {
+    /// Reads the options back out of a job's command so the dialog can show what the job currently uses.
+    /// Anything it does not recognise (for example `--crf 14` typed by hand) is kept in `extra`
+    /// and written back unchanged by [`command`](Self::command).
+    pub fn from_command(cmd: &[String]) -> RenderOptions {
+        let mut o = RenderOptions::default();
+        let mut it = cmd.iter().skip(3).peekable(); // skip `npx hyperframes render`
+        while let Some(tok) = it.next() {
+            let (name, inline) = match tok.split_once('=') {
+                Some((n, v)) if tok.starts_with('-') => (n, Some(v.to_string())),
+                _ => (tok.as_str(), None),
+            };
+            let known_value =
+                matches!(name, "--fps" | "-f" | "-q" | "--quality" | "--format" | "-w" | "--workers" | "-c" | "--composition");
+            let value = if known_value { inline.or_else(|| it.next().cloned()) } else { None };
+            match (name, value) {
+                ("--fps" | "-f", Some(v)) => o.fps = v.parse().ok(),
+                ("-q" | "--quality", Some(v)) => o.quality = Quality::ALL.into_iter().find(|q| q.flag() == v).unwrap_or_default(),
+                ("--format", Some(v)) => o.format = Format::ALL.into_iter().find(|f| f.flag() == v).unwrap_or_default(),
+                ("-w" | "--workers", Some(v)) => o.workers = v.parse().ok(),
+                ("-c" | "--composition", Some(v)) => o.composition = Some(v),
+                ("--hdr", _) => o.hdr = HdrMode::Hdr,
+                ("--sdr", _) => o.hdr = HdrMode::Sdr,
+                _ => o.extra.push(tok.clone()),
+            }
+        }
+        o
     }
 }
 
@@ -162,6 +195,7 @@ mod tests {
             workers: Some(4),
             hdr: HdrMode::Sdr,
             composition: Some("compositions/intro.html".into()),
+            ..Default::default()
         };
         assert_eq!(
             o.command(),
@@ -211,7 +245,7 @@ mod allowlist_tests {
                     for hdr in HdrMode::ALL {
                         for workers in [None, Some(1), Some(8)] {
                             for composition in [None, Some("compositions/intro.html".to_string())] {
-                                let o = RenderOptions { fps, quality, format, workers, hdr, composition };
+                                let o = RenderOptions { fps, quality, format, workers, hdr, composition, extra: vec![] };
                                 let cmd = o.command();
                                 assert!(hfr_proto::validate_command(&cmd).is_ok(), "rejected: {cmd:?}");
                             }
@@ -220,5 +254,39 @@ mod allowlist_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod from_command_tests {
+    use super::*;
+
+    #[test]
+    fn command_round_trips_through_options() {
+        let o = RenderOptions {
+            fps: Some(60),
+            quality: Quality::Delivery,
+            format: Format::Webm,
+            workers: Some(3),
+            hdr: HdrMode::Hdr,
+            composition: Some("compositions/intro.html".into()),
+            extra: vec![],
+        };
+        assert_eq!(RenderOptions::from_command(&o.command()), o);
+    }
+
+    #[test]
+    fn unknown_options_survive_a_round_trip() {
+        let cmd: Vec<String> =
+            ["npx", "hyperframes", "render", "-q", "draft", "--crf", "14", "--quiet", "--fps=24"].iter().map(|s| s.to_string()).collect();
+        let o = RenderOptions::from_command(&cmd);
+        assert_eq!(o.quality, Quality::Draft);
+        assert_eq!(o.fps, Some(24));
+        assert_eq!(o.extra, ["--crf", "14", "--quiet"]);
+        assert!(hfr_proto::validate_command(&o.command()).is_ok());
+        // Changing a modelled option keeps the hand-typed ones.
+        let mut o2 = o.clone();
+        o2.quality = Quality::Delivery;
+        assert!(o2.command().ends_with(&["--crf".to_string(), "14".to_string(), "--quiet".to_string()]));
     }
 }

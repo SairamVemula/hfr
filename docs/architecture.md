@@ -44,8 +44,13 @@ stateDiagram-v2
   Uploaded --> Running: POST start
   Running --> Done: exit code 0
   Running --> Failed: non-zero / spawn error
+  Running --> Cancelled: POST cancel
+  Done --> Running: POST rerun (new options)
+  Failed --> Running: POST rerun
+  Cancelled --> Running: POST rerun
   Done --> [*]: DELETE (after verified download)
   Failed --> [*]: DELETE
+  Cancelled --> [*]: DELETE
 ```
 
 On the VPS each job lives in `$HFR_ROOT/<uuid>/` (`/var/lib/hfr/jobs/<uuid>/`):
@@ -54,6 +59,7 @@ On the VPS each job lives in `$HFR_ROOT/<uuid>/` (`/var/lib/hfr/jobs/<uuid>/`):
 <uuid>/
   project/     the extracted upload; the command runs here
   log.txt      stdout + stderr, appended as lines arrive
+  meta.json    the job's state, saved on every change so an agent restart or upgrade keeps it
 ```
 
 Render options (`crates/core/src/render.rs`) are turned into the job's command (`npx hyperframes render --fps 60 -q delivery ...`) by the client; the agent only validates it against the allowlist in `crates/proto/src/command.rs`. A unit test checks that every combination the UI can offer passes that allowlist.
@@ -77,8 +83,8 @@ Output detection: when a job is `Done`, the agent picks the **newest video file*
 
 These are real, and good first contributions:
 
-- **Job state is in memory.** Restarting `hfr-agent` forgets the job list (files stay on disk under `/var/lib/hfr/jobs`).
-- **No cancel**, no queue (jobs started together run together), no timeouts.
+- **No queue and no timeouts:** jobs started together run together, and a runaway render keeps running until you cancel it.
+- **A render that was running when the agent stopped is marked failed** (its process died with the agent); finished jobs and their files are kept.
 - **Uploads and downloads are not resumable**; the download is a single stream.
 - **One log stream per request:** the live log only shows lines produced after you subscribe; the full log comes from `log.txt`.
 - **Debian/Ubuntu only** installer; ARM VPS support depends on Hyperframes' Chrome download being available for ARM Linux (not verified).

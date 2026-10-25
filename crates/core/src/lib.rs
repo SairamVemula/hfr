@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use futures_util::StreamExt;
-use hfr_proto::{CreateJob, Job, Metrics, OutputInfo};
+use hfr_proto::{CreateJob, Job, Metrics, OutputInfo, RerunRequest};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -44,7 +44,12 @@ impl Default for Config {
     }
 }
 
+/// `HFR_CONFIG` selects another config file (development and tests). A config with `direct_url` never touches
+/// the OS credential store, so test setups cannot overwrite a real token.
 pub fn config_path() -> PathBuf {
+    if let Some(p) = std::env::var_os("HFR_CONFIG") {
+        return PathBuf::from(p);
+    }
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("hfr").join("config.toml")
 }
 
@@ -78,6 +83,9 @@ impl Config {
         let p = config_path();
         let s = std::fs::read_to_string(&p).with_context(|| format!("no config at {} - run `hfr init` first", p.display()))?;
         let mut cfg: Config = toml::from_str(&s)?;
+        if cfg.direct_url.is_some() {
+            return Ok(cfg);
+        }
         if cfg.token.is_empty() {
             cfg.token = secret::fetch().context("token not found in the credential store - run `hfr setup` or `hfr init` again")?;
         } else if secret::store(&cfg.token) {
@@ -91,7 +99,7 @@ impl Config {
         let p = config_path();
         std::fs::create_dir_all(p.parent().unwrap())?;
         let mut on_disk = self.clone();
-        if !self.token.is_empty() && secret::store(&self.token) {
+        if self.direct_url.is_none() && !self.token.is_empty() && secret::store(&self.token) {
             on_disk.token = String::new();
         }
         std::fs::write(&p, toml::to_string_pretty(&on_disk)?)?;
@@ -186,6 +194,20 @@ impl Client {
 
     pub async fn start(&self, id: &str) -> Result<()> {
         Self::ok(self.req(reqwest::Method::POST, &format!("/jobs/{id}/start")).send().await?).await?;
+        Ok(())
+    }
+
+    /// Stop a running render (and everything it started).
+    pub async fn cancel(&self, id: &str) -> Result<()> {
+        Self::ok(self.req(reqwest::Method::POST, &format!("/jobs/{id}/cancel")).send().await?).await?;
+        Ok(())
+    }
+
+    /// Run the job again with another command, reusing the project already on the VPS.
+    /// A running render is stopped first.
+    pub async fn rerun(&self, id: &str, command: Vec<String>) -> Result<()> {
+        let body = RerunRequest { command };
+        Self::ok(self.req(reqwest::Method::POST, &format!("/jobs/{id}/rerun")).json(&body).send().await?).await?;
         Ok(())
     }
 

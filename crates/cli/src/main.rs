@@ -47,6 +47,9 @@ enum Cmd {
         /// Path to the Linux hfr-agent binary (default: target/x86_64-unknown-linux-musl/release).
         #[arg(long)]
         agent: Option<PathBuf>,
+        /// Reinstall everything even if it is already installed and up to date.
+        #[arg(long)]
+        force: bool,
     },
     /// Upload a project and create a job (does not start it).
     Push {
@@ -73,6 +76,20 @@ enum Cmd {
     },
     /// Start an already-pushed job.
     Start { id: String },
+    /// Stop a running render.
+    Cancel { id: String },
+    /// Run a job again with different options, reusing the project already on the VPS (stops it first if it is running).
+    Rerun {
+        id: String,
+        /// Return right after starting instead of following logs.
+        #[arg(long)]
+        detach: bool,
+        #[command(flatten)]
+        opts: RenderArgs,
+        /// Advanced: the full command to run instead of the options above.
+        #[arg(last = true)]
+        command: Vec<String>,
+    },
     /// List jobs.
     Jobs {
         /// Machine-readable output.
@@ -149,7 +166,32 @@ impl RenderArgs {
                 HdrMode::Auto
             },
             composition: self.composition.clone(),
+            extra: vec![],
         }
+    }
+
+    /// Overlays the options given on the command line onto an existing set (used by `rerun`).
+    fn apply(&self, mut base: RenderOptions) -> RenderOptions {
+        let given = self.options();
+        if self.fps.is_some() {
+            base.fps = given.fps;
+        }
+        if self.quality.is_some() {
+            base.quality = given.quality;
+        }
+        if self.format.is_some() {
+            base.format = given.format;
+        }
+        if self.workers.is_some() {
+            base.workers = given.workers;
+        }
+        if self.hdr || self.sdr {
+            base.hdr = given.hdr;
+        }
+        if self.composition.is_some() {
+            base.composition = given.composition;
+        }
+        base
     }
 
     /// An explicit command after `--` wins over the options.
@@ -263,8 +305,8 @@ async fn main() -> Result<()> {
         println!("saved {}", hfr_core::config_path().display());
         return Ok(());
     }
-    if let Cmd::Setup { host, user, key, ssh_port, agent } = cli.cmd {
-        hfr_core::setup::run(hfr_core::setup::Opts { host, user, key, ssh_port, agent }, |l| println!("{l}")).await?;
+    if let Cmd::Setup { host, user, key, ssh_port, agent, force } = cli.cmd {
+        hfr_core::setup::run(hfr_core::setup::Opts { host, user, key, ssh_port, agent, force }, |l| println!("{l}")).await?;
         println!("Setup complete. Try: hfr render <project-dir>");
         return Ok(());
     }
@@ -292,6 +334,26 @@ async fn main() -> Result<()> {
         Cmd::Start { id } => {
             c.start(&id).await?;
             println!("started {id}");
+        }
+        Cmd::Cancel { id } => {
+            c.cancel(&id).await?;
+            println!("cancelling {id}");
+        }
+        Cmd::Rerun { id, detach, opts, command } => {
+            // Options not given keep the value the job already has (including hand-written extras).
+            let cmd =
+                if command.is_empty() { opts.apply(RenderOptions::from_command(&c.job(&id).await?.command)).command() } else { command };
+            c.rerun(&id, cmd).await?;
+            println!("restarted {id}");
+            if !detach {
+                let st = follow(&c, &id).await?;
+                println!("--- job {id} {st:?}");
+                if st == JobState::Done {
+                    println!("download with: hfr pull {id} --delete");
+                } else {
+                    bail!("render did not finish ({st:?})");
+                }
+            }
         }
         Cmd::Jobs { json } => {
             let jobs = c.jobs().await?;

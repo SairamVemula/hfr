@@ -23,7 +23,7 @@ Plain-text bodies with these statuses: `400` bad input (disallowed command, unsa
   "size_bytes": 12345678
 }
 ```
-`state` is one of `created`, `uploaded`, `running`, `done`, `failed`.
+`state` is one of `created`, `uploaded`, `running`, `done`, `failed`, `cancelled`.
 
 ### OutputInfo
 ```json
@@ -51,6 +51,8 @@ Percentages are 0-100; sizes are bytes. `disk_*` describes the largest filesyste
 | `GET /jobs/{id}` | One job | `200` Job |
 | `PUT /jobs/{id}/upload` | Upload the project as a raw **tar** body (streamed, no size limit). Extracted into `project/`; job becomes `uploaded` | `204` |
 | `POST /jobs/{id}/start` | Run the job's command in `project/`. `409` if already running or nothing uploaded | `202` |
+| `POST /jobs/{id}/cancel` | Stop a running render and its whole process tree (SIGTERM to the process group, SIGKILL after 5 s). The job becomes `cancelled`. `409` if it is not running | `202` |
+| `POST /jobs/{id}/rerun` | Run the job again with another command, reusing the uploaded project. Body: `{"command": ["npx","hyperframes","render", ...]}`, validated by the same allowlist. A running render is cancelled first. `409` if nothing was uploaded | `202` |
 | `GET /jobs/{id}/logs` | **Server-Sent Events**: one `data: <line>` event per output line, from the moment you connect | `200` stream |
 | `GET /jobs/{id}/log` | The whole log so far as text (works after the job ended) | `200` text |
 | `GET /jobs/{id}/output/info` | Name, size and SHA-256 of the render output. `409` unless the job is `done`; `404` if no video was written | `200` OutputInfo |

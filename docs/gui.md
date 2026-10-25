@@ -26,10 +26,12 @@ With no saved connection the app shows **Connect your VPS**: enter the host, the
   <img src="images/upload.png" alt="Upload with progress, speed and time left" width="52%">
 </p>
 
-- The list shows name, state pill (Created, Ready, Rendering, Done, Failed), age and size. Click a job to open it.
+- The list shows name, state pill (Created, Ready, Rendering, Done, Failed, Cancelled), age and size. Click a job to open it.
 - The detail pane has a **progress bar** with the current stage (parsed from Hyperframes' progress output) while rendering, then the **live log** (errors in red, warnings in amber, noisy progress lines hidden).
+- **Cancel render** (on a rendering job) asks for a second click (**Really stop the render?**), then stops the render and everything it started on the VPS. The job becomes **Cancelled** and its project stays on the VPS.
+- **Change options and restart** (rendering job) and **Re-render with other options** (done, failed or cancelled job) open the same **Render options** dialog, pre-filled with what the job uses now. The project is already on the VPS, so **nothing is uploaded again**. For a running job the button reads **Stop and restart** and a warning says the frames rendered so far are discarded. Options the dialog does not offer (for example a hand-written `--crf 14`) are kept unchanged.
 - **Download video** saves to your Downloads folder after verifying size and SHA-256. Keep **Free VPS space after download** ticked to delete the job on the VPS in the same step.
-- **Delete** needs a second click (**Really delete?**). It is disabled while a job is running.
+- **Delete** needs a second click (**Really delete?**). It is not offered while a job is running: cancel it first.
 - A status bar at the bottom reports results and errors; dismiss it with **Dismiss**.
 
 ## VPS

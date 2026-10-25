@@ -2919,6 +2919,7 @@ dependencies = [
  "axum",
  "futures-util",
  "hfr-proto",
+ "libc",
  "serde",
  "serde_json",
  "sha2 0.10.9",
