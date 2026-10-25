@@ -1,25 +1,93 @@
-# hyperframes-remote
+# HFR Remote
 
-Render big Hyperframes projects on your own VPS instead of your PC: push the project, watch logs and VPS load, pull the video, delete the job.
+**Render big [Hyperframes](https://github.com/heygen-com/hyperframes) projects on your own VPS instead of your PC.**
+Push the project, watch the render and the server's health live, download the verified video, and free the space - from a desktop app or the `hfr` command line.
 
-| Part | What | Runs on |
+<p align="center">
+  <img src="docs/images/vps.png" alt="HFR Remote VPS dashboard" width="49%">
+  <img src="docs/images/jobs.png" alt="HFR Remote job view with live logs" width="49%">
+</p>
+
+## Why
+
+Long Hyperframes renders (many minutes of footage, heavy compositions) pin every CPU core and make your computer unusable. If you already have a VPS, it can do that work. HFR Remote is the missing glue: file transfer, a job runner, live logs, server metrics, and cleanup, with no ports opened on the server.
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph PC["Your computer"]
+    GUI["hfr-gui<br/>desktop app"]
+    CLI["hfr<br/>command line"]
+    CORE["hfr-core<br/>client library"]
+    GUI --> CORE
+    CLI --> CORE
+  end
+  subgraph VPS["Your VPS (Linux)"]
+    AGENT["hfr-agent<br/>127.0.0.1:7878"]
+    HF["npx hyperframes render<br/>Chrome + ffmpeg"]
+    AGENT --> HF
+  end
+  CORE -- "SSH tunnel (encrypted)<br/>+ bearer token" --> AGENT
+```
+
+1. **`hfr setup`** (or the app's first-run screen) installs a small agent plus Node, ffmpeg, Chrome and `hyperframes` on the VPS over SSH.
+2. **Render:** the project folder is packed, uploaded through an SSH tunnel and rendered by the agent.
+3. **Watch:** logs stream live, with a progress bar and CPU / memory / disk charts of the VPS.
+4. **Download and clean up:** the video comes back with a SHA-256 check, and the job folder can be deleted in the same step to free your SSD.
+
+## Quick start
+
+You need: Windows, macOS or Linux on your side with OpenSSH (`ssh`, `scp`), and a **Debian/Ubuntu VPS** you can SSH into as root or a user with passwordless sudo.
+
+```bash
+# 1. Load your SSH key once per login session (needed if the key has a passphrase)
+ssh-add ~/.ssh/id_ed25519
+
+# 2. One-time install on the VPS
+hfr setup --host 203.0.113.10 --user root
+
+# 3. Render a project on the VPS and follow the logs
+hfr render ./my-project
+
+# 4. Download the video and free the space on the VPS
+hfr pull <job-id> --delete
+```
+
+Prefer a window? Start **HFR Remote** and follow the first-run screen. Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
+
+## Documentation
+
+| Guide | What is in it |
+| --- | --- |
+| [Getting started](docs/getting-started.md) | Install, SSH key setup per OS, first render |
+| [CLI reference](docs/cli.md) | Every `hfr` command and option |
+| [Desktop app](docs/gui.md) | Screens and what they do |
+| [Architecture](docs/architecture.md) | Crates, data flow, job lifecycle |
+| [Agent API](docs/agent-api.md) | HTTP endpoints the VPS agent exposes |
+| [Configuration](docs/configuration.md) | Config file, environment variables, paths on both machines |
+| [Security](docs/security.md) | Threat model, controls, known limits |
+| [Troubleshooting](docs/troubleshooting.md) | Common errors and fixes |
+| [Development](docs/development.md) | Build, test, cross-compile, package, release |
+
+Using an AI agent? Point it at [AGENTS.md](AGENTS.md), [llms.txt](llms.txt) and the ready-made [agent skills](skills/README.md).
+
+## Project layout
+
+| Crate | Binary | Role |
 | --- | --- | --- |
-| `hfr` (crates/cli) | CLI | Windows, macOS, Linux |
-| `hfr-gui` (crates/gui) | GPUI desktop app | Windows, macOS, Linux |
-| `hfr-agent` (crates/agent) | Service on the VPS | Linux x86_64 / aarch64 (static musl) |
+| `crates/proto` | - | Shared data types (jobs, metrics) |
+| `crates/agent` | `hfr-agent` | Service on the VPS: job runner, logs, metrics, output |
+| `crates/core` | - | Client library: SSH tunnel, HTTP client, upload/download, VPS setup |
+| `crates/cli` | `hfr` | Command line |
+| `crates/gui` | `hfr-gui` | Desktop app ([GPUI](https://www.gpui.rs) + gpui-kit) |
 
-Requirements on your computer: `ssh` and `scp` (OpenSSH) and your key loaded in ssh-agent (`ssh-add`).
-VPS: Debian/Ubuntu with SSH access and root or passwordless sudo.
+## Status
 
-```
-cargo build -p hfr-agent --release --target x86_64-unknown-linux-musl   # or aarch64-unknown-linux-musl
-cargo build -p hfr-cli --release
-hfr setup --host <ip> --user <user>        # one-time install on the VPS
-hfr render ./my-project                    # push + render + follow logs
-hfr pull <job-id> --delete                 # download (sha256-verified) and free the VPS space
-hfr-gui                                    # same thing with live dashboards
-```
+Early (0.1). It works end to end on Windows with a Debian/Ubuntu VPS. macOS and Linux clients are type-checked and built in CI but less tested; see [known limitations](docs/architecture.md#known-limitations).
 
-Security: the agent listens on 127.0.0.1 only; the client reaches it through an SSH tunnel and a bearer token
-(kept in Windows Credential Manager / macOS Keychain, or a 0600 config file on Linux). Jobs may only run
-`npx hyperframes render` with an allowlist of options.
+## Contributing and license
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the [security policy](SECURITY.md).
+Licensed under either of [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT) at your option.
+Hyperframes is a separate project by HeyGen with its own license; HFR Remote only drives its command line.

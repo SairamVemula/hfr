@@ -1,0 +1,27 @@
+# HFR Remote
+
+> HFR Remote renders Hyperframes (HTML-to-video) projects on your own Linux VPS instead of your PC. A Rust CLI (`hfr`) and desktop app (`hfr-gui`) push the project through an SSH tunnel to a small agent (`hfr-agent`), stream logs and server metrics, download the SHA-256-verified video, and delete the job to free disk space. Licensed MIT OR Apache-2.0.
+
+## Use it
+- [README](https://github.com/SairamVemula/hfr/blob/main/README.md): overview, quick start
+- [Getting started](https://github.com/SairamVemula/hfr/blob/main/docs/getting-started.md): install, SSH key setup, first render
+- [CLI reference](https://github.com/SairamVemula/hfr/blob/main/docs/cli.md): every command and option
+- [Desktop app](https://github.com/SairamVemula/hfr/blob/main/docs/gui.md)
+- [Troubleshooting](https://github.com/SairamVemula/hfr/blob/main/docs/troubleshooting.md)
+- [Agent skill: render with HFR](https://github.com/SairamVemula/hfr/blob/main/skills/hfr-remote-render/SKILL.md): instructions for AI agents operating the tool
+
+## Understand it
+- [Architecture](https://github.com/SairamVemula/hfr/blob/main/docs/architecture.md): crates, connection, job lifecycle, known limitations
+- [Agent API](https://github.com/SairamVemula/hfr/blob/main/docs/agent-api.md): HTTP endpoints, types, errors
+- [Configuration](https://github.com/SairamVemula/hfr/blob/main/docs/configuration.md): config file, env vars, paths
+- [Security](https://github.com/SairamVemula/hfr/blob/main/docs/security.md): threat model, controls, limits
+
+## Change it
+- [AGENTS.md](https://github.com/SairamVemula/hfr/blob/main/AGENTS.md): rules for coding agents
+- [Development](https://github.com/SairamVemula/hfr/blob/main/docs/development.md): build, test, cross-compile, package, release
+- [Agent skill: develop HFR](https://github.com/SairamVemula/hfr/blob/main/skills/hfr-remote-develop/SKILL.md)
+- [Contributing](https://github.com/SairamVemula/hfr/blob/main/CONTRIBUTING.md)
+
+## Optional
+- [Changelog](https://github.com/SairamVemula/hfr/blob/main/CHANGELOG.md)
+- [Security policy](https://github.com/SairamVemula/hfr/blob/main/SECURITY.md)
