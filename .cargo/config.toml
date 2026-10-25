@@ -1,0 +1,4 @@
+# Pure-Rust agent: link the Linux musl build with the bundled rust-lld (no C toolchain needed).
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "link-self-contained=yes"]

@@ -1,3 +1,5 @@
+mod setup;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -30,6 +32,20 @@ enum Cmd {
         /// Talk to the agent at this URL without an SSH tunnel (local testing).
         #[arg(long)]
         direct_url: Option<String>,
+    },
+    /// One-time install of the agent, Node, ffmpeg, Chrome and hyperframes on the VPS.
+    Setup {
+        #[arg(long)]
+        host: String,
+        #[arg(long, default_value = "root")]
+        user: String,
+        #[arg(long)]
+        key: Option<String>,
+        #[arg(long, default_value_t = 22)]
+        ssh_port: u16,
+        /// Path to the Linux hfr-agent binary (default: target/x86_64-unknown-linux-musl/release).
+        #[arg(long)]
+        agent: Option<PathBuf>,
     },
     /// Upload a project and create a job (does not start it).
     Push {
@@ -129,9 +145,12 @@ async fn main() -> Result<()> {
         println!("saved {}", hfr_core::config_path().display());
         return Ok(());
     }
+    if let Cmd::Setup { host, user, key, ssh_port, agent } = cli.cmd {
+        return setup::run(setup::Opts { host, user, key, ssh_port, agent }).await;
+    }
     let c = Client::connect(&Config::load()?).await?;
     match cli.cmd {
-        Cmd::Init { .. } => unreachable!(),
+        Cmd::Init { .. } | Cmd::Setup { .. } => unreachable!(),
         Cmd::Push { dir, command } => {
             let id = push(&c, &dir, command).await?;
             println!("{id}");
