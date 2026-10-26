@@ -4,6 +4,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-26
+
 ### Changed (breaking: agent API 2)
 - **Projects, renders and files.** The model is now *project -> renders -> output files* instead of one flat job per upload. A project is a folder on the VPS; rendering it again with other options creates a new render in the same project and uploads nothing. The old `/jobs/...` endpoints are gone; see [docs/agent-api.md](docs/agent-api.md). Clients refuse an older agent and say to run `hfr setup`. An upgraded agent migrates existing job folders into projects with one render each.
 - **Only changes are uploaded.** Syncing compares SHA-256 manifests (with a local hash cache) and sends just the new or changed files; deleted files are removed on the VPS. An unchanged folder uploads 0 bytes.
@@ -16,6 +18,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - **Updates.** The app (and `hfr update`) checks GitHub Releases at start-up and at most hourly, shows a banner with the release notes, downloads the installer with progress, speed and time left, verifies a signed checksum list (ed25519, key built into the app) and the installer's SHA-256, then installs it (Windows: silent install and restart; macOS/Linux: opens the verified file). Switchable in Settings; only `github.com` is contacted, via the system `curl`. The release workflow now checks the tag against the versions, refuses stale bundled agents, builds a draft and publishes it only after signing `SHA256SUMS`.
 - **Resolution** option in the Render options dialog and as `--resolution` (1080p/4K landscape, portrait, square) in the CLI.
 - The app accepts any compatible agent API (`MIN_API`..=`API_VERSION`) and shows a soft banner when the VPS agent is older than the app.
+- A rejected render option now says the agent on the VPS is older than the app and points to Upgrade agent.
 - Each SSH tunnel uses a free local port, and the app closes its tunnel before upgrading the agent (a stale tunnel could make an upgraded agent look old).
 - Agent binaries carry an `hfr-agent-api=N` marker; `hfr setup` refuses a bundled agent of the wrong API.
 - **Per-file download and delete**, per-render and per-project delete, each behind a confirmation that names what is removed. Output files are recorded per render (a modification-time window inside the render, which is why only one render runs per project).

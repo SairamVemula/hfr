@@ -64,7 +64,7 @@ Percentages are 0-100; sizes are bytes. `disk_*` describes the largest filesyste
 
 | Method and path | Purpose | Success |
 | --- | --- | --- |
-| `GET /version` | `{ "api": 2, "agent": "0.1.0" }` | `200` |
+| `GET /version` | `{ "api": 2, "agent": "0.1.1" }` | `200` |
 | `GET /status` | `{ "running_jobs": n, "projects": n }` (used by the installer to see whether the VPS is busy) | `200` |
 | `GET /overview` | Every project with its jobs in one call: `[{ "project": Project, "jobs": [Job] }]`, newest first | `200` |
 | `GET /metrics` | Server metrics (samples CPU over ~200 ms) | `200` Metrics |

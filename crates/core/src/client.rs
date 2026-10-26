@@ -84,6 +84,10 @@ impl Client {
         }
         let s = r.status();
         let t = r.text().await.unwrap_or_default();
+        // The allowlist lives on the VPS: an agent older than this app rejects options it does not know yet.
+        if s == reqwest::StatusCode::BAD_REQUEST && t.contains("is not allowed") {
+            bail!("agent returned {s}: {t}. The agent on your VPS is older than this app and does not know this option; upgrade it (Settings > Upgrade agent, or `hfr setup`)");
+        }
         bail!("agent returned {s}: {t}")
     }
 
