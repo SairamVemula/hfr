@@ -1,6 +1,6 @@
 # Agent skills
 
-Ready-made [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) so an AI agent can use or work on HFR Remote without reading the whole repo.
+Ready-made [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) so an AI agent can use or work on HFR without reading the whole repo.
 
 | Skill | Use it when |
 | --- | --- |

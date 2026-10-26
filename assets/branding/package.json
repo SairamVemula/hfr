@@ -1,0 +1,11 @@
+{
+  "name": "hfr-branding",
+  "private": true,
+  "type": "module",
+  "description": "Generates the HFR logo files (see build.mjs)",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "png2icons": "^2.0.1"
+  }
+}

@@ -4,6 +4,9 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Changed
+- **Rebranded as HFR** (Hyperframes Render): new logo (an H of two film strips with a play button), new app icon and a full brand kit (`assets/branding`: colourways, dark/light/mono marks, wordmark lockups, GitHub social preview), generated from one source by `node build.mjs`. The product name is now "HFR" everywhere it is shown (window title, installer, download folder `Downloads/HFR`). If you installed an earlier build, uninstall "HFR Remote" first.
+
 ## [0.1.1] - 2026-10-26
 
 ### Changed (breaking: agent API 2)

@@ -1,6 +1,6 @@
-# HFR Remote
+# HFR
 
-> HFR Remote renders Hyperframes (HTML-to-video) projects on your own Linux VPS instead of your PC. A Rust CLI (`hfr`) and desktop app (`hfr-gui`) sync projects (changed files only) through an SSH tunnel to a small agent (`hfr-agent`), render them with any options, stream logs and server metrics, download each output file (SHA-256-verified, resumable) and delete files, renders or projects to free disk space. Licensed MIT OR Apache-2.0.
+> HFR renders Hyperframes (HTML-to-video) projects on your own Linux VPS instead of your PC. A Rust CLI (`hfr`) and desktop app (`hfr-gui`) sync projects (changed files only) through an SSH tunnel to a small agent (`hfr-agent`), render them with any options, stream logs and server metrics, download each output file (SHA-256-verified, resumable) and delete files, renders or projects to free disk space. Licensed MIT OR Apache-2.0.
 
 ## Use it
 - [README](https://github.com/SairamVemula/hfr/blob/main/README.md): overview, quick start

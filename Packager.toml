@@ -5,12 +5,12 @@
 #               cargo packager --release -c Packager.toml --formats dmg    (macOS)
 #               cargo packager --release -c Packager.toml --formats appimage,deb   (Linux)
 name = "hfr-remote"
-product-name = "HFR Remote"
+product-name = "HFR"
 version = "0.1.1"
 identifier = "dev.hfr.remote"
 description = "Render Hyperframes projects on your own VPS"
 long-description = "Push a Hyperframes project to your VPS, watch the render and the server's health live, download the verified video, and free the space - from a desktop app or the hfr command line."
-authors = ["Sairam Vemula and HFR Remote contributors"]
+authors = ["Sairam Vemula and HFR contributors"]
 homepage = "https://github.com/SairamVemula/hfr"
 license-file = "LICENSE"
 out-dir = "dist/installers"

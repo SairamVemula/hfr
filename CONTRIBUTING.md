@@ -1,4 +1,4 @@
-# Contributing to HFR Remote
+# Contributing to HFR
 
 Thanks for helping! This project is small enough that most changes need no prior discussion; for anything large (new endpoint, new platform, UI overhaul) please open an issue first.
 

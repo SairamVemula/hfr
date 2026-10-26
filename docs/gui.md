@@ -1,4 +1,4 @@
-# Desktop app: HFR Remote
+# Desktop app: HFR
 
 `hfr-gui` is a native app (GPUI) with the same abilities as the CLI plus live dashboards. It uses the same saved connection and the same list of known folders as `hfr`, and both can be used side by side. It needs agent API 2: if your VPS still runs an older agent the app says so and offers **Upgrade agent** in Settings (see [troubleshooting.md](troubleshooting.md)).
 
@@ -116,7 +116,7 @@ Refreshed every 2 seconds:
 ## Settings
 
 - **Your VPS**: host, user, "SSH tunnel to 127.0.0.1 only", where the token is kept (Windows Credential Manager, macOS Keychain, or an owner-only config file on Linux) and the config file path.
-- **Downloads**: the folder downloads go to (default `Downloads/HFR Remote`), with **Browse** and **Save**, and **Delete a file from the VPS after it was downloaded and verified** (on by default; only a verified file is ever deleted).
+- **Downloads**: the folder downloads go to (default `Downloads/HFR`), with **Browse** and **Save**, and **Delete a file from the VPS after it was downloaded and verified** (on by default; only a verified file is ever deleted).
 - **Upgrade or reinstall the agent**: re-runs the installer, keeping your token and projects. It never interrupts a running render.
 
 ## Updates

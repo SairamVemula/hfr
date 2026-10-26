@@ -4,7 +4,7 @@ Guide for AI coding agents (and humans in a hurry) working in or with this repos
 
 ## What this is
 
-HFR Remote renders [Hyperframes](https://github.com/heygen-com/hyperframes) video projects on the user's own Linux VPS. A small agent (`hfr-agent`) runs on the VPS; a CLI (`hfr`) and a desktop app (`hfr-gui`) sync projects to it through an SSH tunnel (only changed files are uploaded), render them with any options, stream logs and server metrics, download each output file (verified, resumable) and delete files, renders or projects to free disk space.
+HFR renders [Hyperframes](https://github.com/heygen-com/hyperframes) video projects on the user's own Linux VPS. A small agent (`hfr-agent`) runs on the VPS; a CLI (`hfr`) and a desktop app (`hfr-gui`) sync projects to it through an SSH tunnel (only changed files are uploaded), render them with any options, stream logs and server metrics, download each output file (verified, resumable) and delete files, renders or projects to free disk space.
 
 ## If you are **using** the tool for someone
 

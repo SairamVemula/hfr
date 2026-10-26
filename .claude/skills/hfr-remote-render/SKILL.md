@@ -1,11 +1,11 @@
 ---
 name: hfr-remote-render
-description: Operate HFR Remote (the `hfr` CLI / `hfr-gui` app) to render a Hyperframes video project on the user's own VPS instead of their PC. Use when the user wants to render a Hyperframes or "hyperframes" project remotely, offload a heavy render, push or upload a project to their server, follow a remote render, render again with other options, check the VPS's CPU/RAM/disk, download the finished video, free space on the VPS, set up or repair the VPS connection, or mentions `hfr`, "HFR Remote" or "hfr-agent".
+description: Operate HFR (the `hfr` CLI / `hfr-gui` app) to render a Hyperframes video project on the user's own VPS instead of their PC. Use when the user wants to render a Hyperframes or "hyperframes" project remotely, offload a heavy render, push or upload a project to their server, follow a remote render, render again with other options, check the VPS's CPU/RAM/disk, download the finished video, free space on the VPS, set up or repair the VPS connection, or mentions `hfr`, "HFR" or "hfr-agent".
 ---
 
-# Rendering Hyperframes projects on the user's VPS with HFR Remote
+# Rendering Hyperframes projects on the user's VPS with HFR
 
-HFR Remote moves heavy Hyperframes renders off the user's computer. `hfr` syncs the project to their Linux VPS through an SSH tunnel to `hfr-agent`, the VPS renders it, and `hfr pull` brings back the SHA-256-verified video and can delete it from the VPS to free disk.
+HFR moves heavy Hyperframes renders off the user's computer. `hfr` syncs the project to their Linux VPS through an SSH tunnel to `hfr-agent`, the VPS renders it, and `hfr pull` brings back the SHA-256-verified video and can delete it from the VPS to free disk.
 
 Full docs: `docs/cli.md`, `docs/troubleshooting.md`, `docs/security.md` in the repository.
 
@@ -109,7 +109,7 @@ hfr rm project <project>                  # delete a project with all renders an
 
 More: `docs/troubleshooting.md`.
 
-## Updating HFR Remote itself
+## Updating HFR itself
 
 `hfr update --check --json` says whether a newer version exists (`available`, `latest`, `notes`); `hfr update` downloads, verifies and installs it (Windows closes the program and restarts it, so only run it when the user asked and nothing is in progress). The VPS agent is updated separately with `hfr setup` (only with the user's go-ahead, and never while a render is running).
 
@@ -122,4 +122,4 @@ More: `docs/troubleshooting.md`.
 
 ## Desktop app
 
-`hfr-gui` offers the same actions with live charts. If the user prefers a window, tell them to open **HFR Remote**: *Projects* lists every project; *New render* picks a folder (a known folder offers *Sync changes* / *Render*), shows the options dialog and uploads only changes with a cancellable progress view; a project's page lists its renders and each render's output files with **Download** and **Delete** per file; *Transfers* shows percentage, speed and time left for every upload and download, with pause and resume.
+`hfr-gui` offers the same actions with live charts. If the user prefers a window, tell them to open **HFR**: *Projects* lists every project; *New render* picks a folder (a known folder offers *Sync changes* / *Render*), shows the options dialog and uploads only changes with a cancellable progress view; a project's page lists its renders and each render's output files with **Download** and **Delete** per file; *Transfers* shows percentage, speed and time left for every upload and download, with pause and resume.

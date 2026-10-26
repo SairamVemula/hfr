@@ -99,7 +99,7 @@ impl HfrApp {
                         if manual {
                             s.status = match s.update.offer() {
                                 Some(r) => format!("Version {} is available", r.version),
-                                None => format!("HFR Remote {} is up to date", update::CURRENT_VERSION),
+                                None => format!("HFR {} is up to date", update::CURRENT_VERSION),
                             };
                         }
                     }
@@ -234,11 +234,7 @@ impl HfrApp {
                         .child(Icon::new(IconName::CircleCheck).size_4().text_color(theme::success()))
                         .child(div().flex_1().text_color(theme::fg()).child(format!(
                             "Version {v} is downloaded and verified. {}",
-                            if cfg!(windows) {
-                                "HFR Remote will close, install it and start again."
-                            } else {
-                                "Open the installer to finish."
-                            }
+                            if cfg!(windows) { "HFR will close, install it and start again." } else { "Open the installer to finish." }
                         )))
                         .child(
                             Button::new("upd-install")

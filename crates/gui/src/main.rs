@@ -55,6 +55,15 @@ fn ago(unix: u64) -> String {
     }
 }
 
+/// The HFR icon (`assets/branding/icon-128.png`, generated from the logo source) shown at `size` pixels.
+fn brand_mark(size: f32) -> impl IntoElement {
+    static ICON: &[u8] = include_bytes!("../../../assets/branding/icon-128.png");
+    thread_local! {
+        static IMAGE: Arc<Image> = Arc::new(Image::from_bytes(ImageFormat::Png, ICON.to_vec()));
+    }
+    img(ImageSource::Image(IMAGE.with(|i| i.clone()))).w(px(size)).h(px(size)).flex_none()
+}
+
 fn mono() -> &'static str {
     if cfg!(target_os = "macos") {
         "Menlo"
@@ -515,29 +524,12 @@ impl HfrApp {
             .border_r_1()
             .border_color(theme::border())
             .child(
-                div()
-                    .h_flex()
-                    .items_center()
-                    .gap_2()
-                    .px_2()
-                    .pb_3()
-                    .child(
-                        div()
-                            .w(px(30.))
-                            .h(px(30.))
-                            .rounded_lg()
-                            .bg(theme::accent())
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(Icon::new(IconName::Play).size_4().text_color(gpui_kit::white())),
-                    )
-                    .child(
-                        div()
-                            .v_flex()
-                            .child(div().font_bold().text_color(theme::fg()).child("HFR Remote"))
-                            .child(div().text_xs().text_color(theme::muted()).child("Hyperframes renderer")),
-                    ),
+                div().h_flex().items_center().gap_2().px_2().pb_3().child(brand_mark(34.)).child(
+                    div()
+                        .v_flex()
+                        .child(div().font_bold().text_color(theme::fg()).child("HFR"))
+                        .child(div().text_xs().text_color(theme::muted()).child("Hyperframes Render")),
+                ),
             )
             .when(usable, |d| {
                 d.child(self.nav_item("nav-projects", IconName::Folder, "Projects", Page::Projects, Some(self.projects.len()), cx))
@@ -650,7 +642,7 @@ fn main() {
         gpui_kit::init(cx);
         theme::apply(cx);
         let opts = WindowOptions {
-            titlebar: Some(TitlebarOptions { title: Some("HFR Remote".into()), ..Default::default() }),
+            titlebar: Some(TitlebarOptions { title: Some("HFR".into()), ..Default::default() }),
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1200.), px(780.)), cx))),
             window_min_size: Some(size(px(980.), px(620.))),
             ..Default::default()

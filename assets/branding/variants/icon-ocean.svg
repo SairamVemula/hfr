@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4CC2FF"/><stop offset="1" stop-color="#2D5BEA"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <mask id="x-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+    <rect width="512" height="512" fill="#fff"/>
+    <rect x="128" y="124" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="124" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="184" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="184" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="244" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="244" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="304" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="304" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="364" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="364" width="24" height="24" rx="7" fill="#000"/>
+  </mask>
+  <g mask="url(#x-cut)" fill="#FFFFFF">
+    <rect x="104" y="96" width="72" height="320" rx="20"/>
+    <rect x="336" y="96" width="72" height="320" rx="20"/>
+  </g>
+  <path d="M216 186V326L294 256Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round"/>
+</svg>

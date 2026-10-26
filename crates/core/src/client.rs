@@ -118,7 +118,7 @@ impl Client {
             bail!("the agent on the VPS speaks API {}, this app needs {MIN_API} or newer; upgrade it with `hfr setup`", v.api);
         }
         if v.api > API_VERSION {
-            bail!("the agent on the VPS speaks API {}, newer than this app understands ({API_VERSION}); update HFR Remote", v.api);
+            bail!("the agent on the VPS speaks API {}, newer than this app understands ({API_VERSION}); update HFR", v.api);
         }
         Ok(v)
     }

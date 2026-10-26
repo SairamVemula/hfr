@@ -21,7 +21,7 @@ token = ""            # empty when the token is in the OS credential store
 remote_port = 7878    # agent port on the VPS (loopback)
 local_port = 17878    # only a fallback: each connection picks a free local port for its tunnel
 # direct_url = "http://127.0.0.1:7878"      # skip the tunnel (testing only)
-# download_dir = 'D:\Renders'                # default: Downloads/HFR Remote
+# download_dir = 'D:\Renders'                # default: Downloads/HFR
 free_after_download = true   # delete a file from the VPS after it was downloaded and verified
 ```
 
@@ -50,7 +50,7 @@ Both are shared by the CLI and the app. A folder is identified by its path, so t
 
 ### Downloads
 
-Files are saved to `<download folder>/<project name>/<file>`; the download folder defaults to `Downloads/HFR Remote` and can be changed in the app's Settings or with `download_dir`. An unfinished download is `<file>.hfrpart` plus `<file>.hfrpart.json` next to it; run the download again to resume, or delete both files to discard it. Existing files are never overwritten.
+Files are saved to `<download folder>/<project name>/<file>`; the download folder defaults to `Downloads/HFR` and can be changed in the app's Settings or with `download_dir`. An unfinished download is `<file>.hfrpart` plus `<file>.hfrpart.json` next to it; run the download again to resume, or delete both files to discard it. Existing files are never overwritten.
 
 ### Project upload rules
 

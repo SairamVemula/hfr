@@ -1,6 +1,6 @@
 # Code of conduct
 
-We want HFR Remote to be a friendly, harassment-free project for everyone, regardless of experience, background or identity.
+We want HFR to be a friendly, harassment-free project for everyone, regardless of experience, background or identity.
 
 **Expected:** be respectful and patient, assume good intent, give and accept constructive feedback, and focus on what is best for the project and its users.
 

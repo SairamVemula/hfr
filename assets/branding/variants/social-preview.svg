@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9B7BFF"/><stop offset="1" stop-color="#5B4CF0"/></linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0E1020"/><stop offset="1" stop-color="#171436"/></linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6D4DFF" stop-opacity="0.55"/><stop offset="1" stop-color="#6D4DFF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#sky)"/>
+  <circle cx="1010" cy="320" r="430" fill="url(#halo)"/>
+  <g transform="translate(110 96)">
+    <g transform="scale(0.25)"><rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <mask id="s-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+    <rect width="512" height="512" fill="#fff"/>
+    <rect x="128" y="124" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="124" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="184" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="184" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="244" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="244" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="304" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="304" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="364" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="364" width="24" height="24" rx="7" fill="#000"/>
+  </mask>
+  <g mask="url(#s-cut)" fill="#FFFFFF">
+    <rect x="104" y="96" width="72" height="320" rx="20"/>
+    <rect x="336" y="96" width="72" height="320" rx="20"/>
+  </g>
+  <path d="M216 186V326L294 256Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round"/></g>
+    <g transform="translate(160 32) scale(0.32)"><g transform="translate(0 0)"><path stroke="#FFFFFF" stroke-width="46" fill="none" stroke-linejoin="miter" stroke-linecap="butt" d="M23 0V200 M107 0V200 M23 100H107"/></g><g transform="translate(170 0)"><path stroke="#FFFFFF" stroke-width="46" fill="none" stroke-linejoin="miter" stroke-linecap="butt" d="M23 0V200 M0 23H118 M23 96H100"/></g><g transform="translate(330 0)"><path stroke="#FFFFFF" stroke-width="46" fill="none" stroke-linejoin="miter" stroke-linecap="butt" d="M23 200V0 M0 23H72A42.5 42.5 0 0 1 72 108H23"/><path d="M62 98H108L134 200H88Z" fill="#FFFFFF"/></g></g>
+  </g>
+  <text x="110" y="330" font-family="Segoe UI, Inter, Arial, sans-serif" font-weight="700" font-size="64" fill="#FFFFFF">Render Hyperframes</text>
+  <text x="110" y="405" font-family="Segoe UI, Inter, Arial, sans-serif" font-weight="700" font-size="64" fill="#B9A6FF">on your own VPS.</text>
+  <text x="110" y="490" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="27" fill="#9AA3BD">Upload once  ·  render with any options  ·  download verified</text>
+  <g transform="translate(850 136) scale(0.72)"><rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <mask id="sh-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+    <rect width="512" height="512" fill="#fff"/>
+    <rect x="128" y="124" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="124" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="184" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="184" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="244" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="244" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="304" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="304" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="128" y="364" width="24" height="24" rx="7" fill="#000"/>
+    <rect x="360" y="364" width="24" height="24" rx="7" fill="#000"/>
+  </mask>
+  <g mask="url(#sh-cut)" fill="#FFFFFF">
+    <rect x="104" y="96" width="72" height="320" rx="20"/>
+    <rect x="336" y="96" width="72" height="320" rx="20"/>
+  </g>
+  <path d="M216 186V326L294 256Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round"/></g>
+</svg>

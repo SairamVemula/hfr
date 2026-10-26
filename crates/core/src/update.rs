@@ -382,7 +382,7 @@ pub fn install(file: &Path) -> Result<String> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open").arg(file).spawn().context("could not open the disk image")?;
-        Ok("Opened the disk image. Drag HFR Remote to Applications, replacing the old one.".into())
+        Ok("Opened the disk image. Drag HFR to Applications, replacing the old one.".into())
     }
     #[cfg(all(not(windows), not(target_os = "macos")))]
     {

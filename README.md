@@ -1,4 +1,8 @@
-# HFR Remote
+<p align="center">
+  <img src="assets/branding/variants/logo-horizontal.svg" alt="HFR - Hyperframes Render" width="320">
+</p>
+
+<h1 align="center">HFR</h1>
 
 **Render big [Hyperframes](https://github.com/heygen-com/hyperframes) projects on your own VPS instead of your PC.**
 Upload a project once, render it as many times as you like with different options, watch the server's health live, download each video (verified, resumable) and free the space - from a desktop app or the `hfr` command line.
@@ -10,7 +14,7 @@ Upload a project once, render it as many times as you like with different option
 
 ## Why
 
-Long Hyperframes renders (many minutes of footage, heavy compositions) pin every CPU core and make your computer unusable. If you already have a VPS, it can do that work. HFR Remote is the missing glue: file transfer, a job runner, live logs, server metrics, and cleanup, with no ports opened on the server.
+Long Hyperframes renders (many minutes of footage, heavy compositions) pin every CPU core and make your computer unusable. If you already have a VPS, it can do that work. HFR is the missing glue: file transfer, a job runner, live logs, server metrics, and cleanup, with no ports opened on the server.
 
 ## How it works
 
@@ -60,7 +64,7 @@ hfr projects
 hfr pull <job-id> --delete
 ```
 
-Prefer a window? Start **HFR Remote** and follow the first-run screen. Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
+Prefer a window? Start **HFR** and follow the first-run screen. Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
 ## Documentation
 
@@ -96,4 +100,4 @@ Early (0.1). It works end to end on Windows with a Debian/Ubuntu VPS. macOS and 
 
 Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the [security policy](SECURITY.md).
 Licensed under either of [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT) at your option.
-Hyperframes is a separate project by HeyGen with its own license; HFR Remote only drives its command line.
+Hyperframes is a separate project by HeyGen with its own license; HFR only drives its command line.

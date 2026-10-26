@@ -1,4 +1,4 @@
-//! HFR Remote look: a dark, dense "pro tool" palette with a violet accent.
+//! HFR look: a dark, dense "pro tool" palette with a violet accent.
 
 use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::{rgb, App, Hsla};

@@ -10,7 +10,7 @@
 
 The installer needs `apt`. Other distributions are not supported yet.
 
-## 1. Install HFR Remote
+## 1. Install HFR
 
 Download an installer from the [releases page](https://github.com/SairamVemula/hfr/releases) (Windows `.exe`, macOS `.dmg`, Linux `.AppImage` / `.deb`). It installs the desktop app (`hfr-gui`) and the command line (`hfr`) together, and bundles the Linux agent that gets uploaded to your VPS. On Windows the CLI is `hfr.exe` in the install folder; add that folder to your `PATH` to run `hfr` from any terminal.
 
@@ -58,7 +58,7 @@ Command line:
 hfr setup --host 203.0.113.10 --user you
 ```
 
-Or open **HFR Remote**: the first-run screen asks for the same three things (host, user, optional key file).
+Or open **HFR**: the first-run screen asks for the same three things (host, user, optional key file).
 
 What it does, step by step: detects the VPS CPU type, uploads the matching static agent, installs ffmpeg + Chrome libraries + Node 22 + `hyperframes`, creates an unprivileged `hfr` user and a hardened systemd service, generates a random token, saves the connection locally, and checks the tunnel. It is safe to re-run: every step first checks what is already there and only installs what is missing or outdated, so a second run changes nothing and takes seconds. It keeps your token and jobs, and it never interrupts a running render: upgrades that could do so are postponed until the VPS is idle (`hfr setup --force` reinstalls everything).
 
@@ -81,7 +81,7 @@ hfr files <job>                   # the videos a render wrote
 hfr pull <job> --delete           # download them (resumable), verify SHA-256, then delete on the VPS
 ```
 
-In the app, open the project, select the render and press **Download** next to a file (or **Download all**). The Transfers bar shows percentage, speed and time left, with Pause and Resume. Files go to `Downloads/HFR Remote/<project>` (CLI: current folder, or `-o <dir>`); an existing file is never overwritten. Keep **Delete a file from the VPS after it was downloaded and verified** ticked in Settings to free the space in the same step.
+In the app, open the project, select the render and press **Download** next to a file (or **Download all**). The Transfers bar shows percentage, speed and time left, with Pause and Resume. Files go to `Downloads/HFR/<project>` (CLI: current folder, or `-o <dir>`); an existing file is never overwritten. Keep **Delete a file from the VPS after it was downloaded and verified** ticked in Settings to free the space in the same step.
 
 Nothing is deleted unless the download verified. Deleting without downloading always asks first: **Delete** next to a file, a render or a project in the app (the dialog says what goes), or `hfr rm file|job|project`.
 

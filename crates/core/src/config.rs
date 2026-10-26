@@ -21,7 +21,7 @@ pub struct Config {
     pub local_port: u16,
     /// Skip the SSH tunnel and talk to this URL directly (local testing).
     pub direct_url: Option<String>,
-    /// Where downloaded renders go. Default: `Downloads/HFR Remote`.
+    /// Where downloaded renders go. Default: `Downloads/HFR`.
     #[serde(default)]
     pub download_dir: Option<String>,
     /// Delete a render from the VPS right after it was downloaded and verified.
@@ -122,7 +122,7 @@ impl Config {
     pub fn download_folder(&self) -> PathBuf {
         match &self.download_dir {
             Some(d) if !d.trim().is_empty() => PathBuf::from(d),
-            _ => dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")).join("HFR Remote"),
+            _ => dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")).join("HFR"),
         }
     }
 }

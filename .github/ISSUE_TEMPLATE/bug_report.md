@@ -10,7 +10,7 @@ labels: bug
 1.
 
 **Environment**
-- HFR Remote version:
+- HFR version:
 - Your OS (and GPU/driver if it is a GUI problem):
 - VPS OS and CPU (`uname -a`):
 - Hyperframes version on the VPS (`hyperframes --version`):

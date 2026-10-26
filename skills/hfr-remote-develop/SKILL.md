@@ -1,9 +1,9 @@
 ---
 name: hfr-remote-develop
-description: Work on the HFR Remote codebase (Rust workspace with hfr-agent, hfr-core, hfr-cli, hfr-gui on GPUI/gpui-kit, hfr-proto). Use when fixing bugs, adding CLI commands, agent endpoints or GUI screens, changing the VPS installer, touching command validation, archive extraction, authentication or the SSH tunnel, cross-compiling the Linux agent, packaging installers, or updating the docs of this project.
+description: Work on the HFR codebase (Rust workspace with hfr-agent, hfr-core, hfr-cli, hfr-gui on GPUI/gpui-kit, hfr-proto). Use when fixing bugs, adding CLI commands, agent endpoints or GUI screens, changing the VPS installer, touching command validation, archive extraction, authentication or the SSH tunnel, cross-compiling the Linux agent, packaging installers, or updating the docs of this project.
 ---
 
-# Developing HFR Remote
+# Developing HFR
 
 Read `AGENTS.md`, `docs/architecture.md` and `docs/development.md` first; this skill is the short version plus recipes.
 

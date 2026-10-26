@@ -5,7 +5,7 @@ members = ["crates/proto", "crates/agent", "crates/core", "crates/cli", "crates/
 [workspace.package]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/SairamVemula/hfr"
-authors = ["Sairam Vemula and HFR Remote contributors"]
+authors = ["Sairam Vemula and HFR contributors"]
 edition = "2021"
 version = "0.1.1"
 

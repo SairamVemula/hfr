@@ -86,7 +86,7 @@ Installed apps look for a newer release on GitHub (`hfr-core/src/update.rs`), do
 
 ## Branding assets
 
-`assets/branding/icon.svg` and `mark.svg` are the source. Regenerate the PNG/ICO/ICNS set with any SVG rasteriser; the committed files were produced with `@resvg/resvg-js` and `png2icons`. The colour palette lives in `crates/gui/src/theme.rs`.
+The whole brand kit (app icon in PNG/ICO/ICNS, colourways, dark/light/mono marks, wordmark lockups, GitHub social preview, a contact sheet) is generated from one glyph definition: `cd assets/branding && npm install && node build.mjs`. See [assets/branding/README.md](../assets/branding/README.md). The app embeds `icon-128.png` for its sidebar logo; the colour palette lives in `crates/gui/src/theme.rs`.
 
 ## Code map
 

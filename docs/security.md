@@ -1,6 +1,6 @@
 # Security
 
-HFR Remote runs a service that executes a render command on your server, so its security model matters. This page is what is actually implemented, and what is not.
+HFR runs a service that executes a render command on your server, so its security model matters. This page is what is actually implemented, and what is not.
 
 To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 
