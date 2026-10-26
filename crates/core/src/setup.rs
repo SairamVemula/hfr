@@ -65,7 +65,7 @@ fn check_agent_api(path: &std::path::Path) -> Result<()> {
         return Ok(());
     }
     bail!(
-        "the agent binary {} is outdated: it does not speak API {} (it was built before this version of hfr).          Rebuild it with scripts/stage-agents.sh (or cargo build -p hfr-agent --release --target <triple>) and reinstall the app, or pass --agent <path>",
+        "the agent binary {} is outdated: it does not speak API {} (it was built before this version of hfr). Rebuild it with scripts/stage-agents.sh (or cargo build -p hfr-agent --release --target <triple>) and reinstall the app, or pass --agent <path>",
         path.display(),
         hfr_proto::API_VERSION
     );

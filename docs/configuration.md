@@ -81,6 +81,10 @@ Service management: `sudo systemctl status hfr-agent`, `sudo journalctl -u hfr-a
 
 To change one under systemd: `sudo systemctl edit hfr-agent` and add `[Service]` / `Environment=...`.
 
+### Update check
+
+`update.json` next to the config file remembers the last check, the newer version found, whether automatic checks are on and which version you skipped. Automatic checks run at start-up and at most once an hour; turn them off in Settings. Debug builds also read `HFR_UPDATE_URL`, `HFR_UPDATE_PUBKEY` and `HFR_UPDATE_NO_INSTALL` for testing ([development.md](development.md#releasing-and-updates)).
+
 ### Client environment variable
 
 `HFR_CONFIG=<path>` makes `hfr` and the app read and write that config file instead of the default one. A config that sets `direct_url` never touches the OS credential store, so a throw-away test setup cannot overwrite your real token. Intended for development and tests.

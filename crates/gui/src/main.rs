@@ -5,6 +5,7 @@ mod pages;
 mod projects_view;
 mod theme;
 mod transfers;
+mod updates;
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -166,6 +167,11 @@ struct HfrApp {
     transfers: Vec<transfers::TransferUi>,
     next_transfer_id: u64,
     dialog: Option<dialogs::Dialog>,
+    update: updates::UpdateUi,
+    /// Version of the agent on the VPS, once connected.
+    agent_version: Option<String>,
+    agent_banner_hidden: bool,
+    _update_task: Option<Task<()>>,
     host_in: Entity<InputState>,
     user_in: Entity<InputState>,
     key_in: Entity<InputState>,
@@ -209,6 +215,10 @@ impl HfrApp {
             transfers: Vec::new(),
             next_transfer_id: 1,
             dialog: None,
+            update: updates::UpdateUi::new(),
+            agent_version: None,
+            agent_banner_hidden: false,
+            _update_task: None,
             host_in,
             user_in,
             key_in,
@@ -219,6 +229,7 @@ impl HfrApp {
             _tick_task: None,
         };
         app._tick_task = Some(app.start_transfer_ticker(cx));
+        app._update_task = Some(app.start_update_loop(cx));
         app.connect_and_poll(cx);
         app
     }
@@ -232,7 +243,8 @@ impl HfrApp {
             let res = rt.spawn(async move { c.ensure_compatible().await.map_err(|e| e.to_string()) }).await;
             let _ = this.update(cx, |s, cx| {
                 match res {
-                    Ok(Ok(())) => {
+                    Ok(Ok(v)) => {
+                        s.agent_version = Some(v.agent);
                         s.agent_error = None;
                         s._poll = s.start_polling(cx);
                     }
@@ -618,6 +630,8 @@ impl Render for HfrApp {
                     .flex_1()
                     .min_w_0()
                     .h_full()
+                    .children(self.update_banner(cx))
+                    .children(self.agent_banner(cx))
                     .child(div().flex_1().min_h_0().child(page))
                     .children(self.transfer_bar(cx))
                     .children(self.status_bar(cx)),

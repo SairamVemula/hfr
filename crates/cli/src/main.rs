@@ -11,10 +11,10 @@ use clap::{Parser, Subcommand};
 use hfr_core::{
     download,
     registry::Registry,
-    render::{Format, HdrMode, Quality, RenderOptions},
+    render::{Format, HdrMode, Quality, RenderOptions, Resolution},
     sync,
     transfer::{eta, fmt_bytes, fmt_duration, fmt_rate, SpeedMeter},
-    Cancelled, Client, Config, Phase, Transfer,
+    update, Cancelled, Client, Config, Phase, Transfer,
 };
 use hfr_proto::{Job, JobState, ProjectView};
 
@@ -27,6 +27,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Look for a newer version of hfr and install it (Windows: silently, then the app starts again).
+    Update {
+        /// Only report whether a newer version exists.
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// Save connection settings.
     Init {
         #[arg(long)]
@@ -183,6 +191,9 @@ struct RenderArgs {
     /// Force SDR output.
     #[arg(long, conflicts_with = "hdr")]
     sdr: bool,
+    /// Output size preset; the shape must match the composition (default: its own size). Not with --hdr.
+    #[arg(long, value_parser = ["landscape", "landscape-4k", "portrait", "portrait-4k", "square", "square-4k"])]
+    resolution: Option<String>,
     /// Render this HTML file instead of index.html, relative to the project.
     #[arg(long)]
     composition: Option<String>,
@@ -207,6 +218,9 @@ impl RenderArgs {
             base.hdr = HdrMode::Hdr;
         } else if self.sdr {
             base.hdr = HdrMode::Sdr;
+        }
+        if let Some(r) = self.resolution.as_deref().and_then(Resolution::from_flag) {
+            base.resolution = Some(r);
         }
         if self.composition.is_some() {
             base.composition = self.composition.clone();
@@ -436,14 +450,53 @@ async fn main() -> Result<()> {
             println!("Setup complete. Try: hfr render <project-folder>");
             Ok(())
         }
+        Cmd::Update { check, json } => update_cmd(check, json).await,
         other => run(other).await,
     }
+}
+
+async fn update_cmd(check: bool, json: bool) -> Result<()> {
+    let mut st = update::State::load();
+    st.refresh(update::CURRENT_VERSION).await?;
+    let rel = st.latest.clone().filter(|r| update::is_newer(update::CURRENT_VERSION, &r.version));
+    if json {
+        let v = serde_json::json!({
+            "current": update::CURRENT_VERSION,
+            "latest": rel.as_ref().map(|r| r.version.clone()),
+            "available": rel.is_some(),
+            "notes": rel.as_ref().map(|r| r.notes.clone()),
+        });
+        println!("{}", serde_json::to_string_pretty(&v)?);
+        return Ok(());
+    }
+    let Some(rel) = rel else {
+        println!("hfr {} is up to date.", update::CURRENT_VERSION);
+        return Ok(());
+    };
+    println!("hfr {} is available (you have {}).", rel.version, update::CURRENT_VERSION);
+    if !rel.notes.trim().is_empty() {
+        println!(
+            "
+{}
+",
+            rel.notes.trim()
+        );
+    }
+    if check {
+        println!("Run `hfr update` to install it.");
+        return Ok(());
+    }
+    let t = Transfer::new();
+    let file = with_progress(t.clone(), update::download_verified(&rel, &t)).await?;
+    println!("Verified {}", file.display());
+    println!("{}", update::install(&file)?);
+    Ok(())
 }
 
 async fn run(cmd: Cmd) -> Result<()> {
     let c = connect().await?;
     match cmd {
-        Cmd::Init { .. } | Cmd::Setup { .. } => unreachable!(),
+        Cmd::Init { .. } | Cmd::Setup { .. } | Cmd::Update { .. } => unreachable!(),
         Cmd::Projects { json } => {
             let all = c.overview().await?;
             if json {
@@ -574,6 +627,15 @@ async fn run(cmd: Cmd) -> Result<()> {
             println!("RAM  {} / {}", fmt_bytes(m.mem_used), fmt_bytes(m.mem_total));
             println!("Swap {} / {}", fmt_bytes(m.swap_used), fmt_bytes(m.swap_total));
             println!("Disk {} / {}", fmt_bytes(m.disk_used), fmt_bytes(m.disk_total));
+            // From the last check only: `status` never goes to the network for this.
+            if let Some(r) = update::State::load().offer(update::CURRENT_VERSION) {
+                println!(
+                    "
+Update available: hfr {} (you have {}). Run `hfr update`.",
+                    r.version,
+                    update::CURRENT_VERSION
+                );
+            }
         }
         Cmd::Pull { job, file, out, delete } => {
             let all = c.overview().await?;

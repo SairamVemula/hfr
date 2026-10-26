@@ -38,13 +38,13 @@ hfr render <dir> --no-sync                      # use the files already on the V
 hfr push <dir>                                  # upload/sync only, no render
 ```
 
-Options, the same ones the app's *Render options* dialog offers: `--fps <1-240>` [composition's own], `--quality draft|looks|delivery` [looks], `--format mp4|webm|mov|gif` [mp4; webm and mov keep transparency], `--workers <n>` [auto; each Chrome worker needs ~256 MB RAM, so check `hfr status` first], `--hdr` / `--sdr` [auto-detect], `--composition <file.html>` [index.html]. Leave an option out to keep Hyperframes' default; only pass what the user asked for. `-- <full command>` replaces them all (advanced). `--project <id or name>` picks a project explicitly; `--new` forces a new one.
+Options, the same ones the app's *Render options* dialog offers: `--fps <1-240>` [composition's own], `--quality draft|looks|delivery` [looks], `--format mp4|webm|mov|gif` [mp4; webm and mov keep transparency], `--workers <n>` [auto; each Chrome worker needs ~256 MB RAM, so check `hfr status` first], `--resolution landscape|landscape-4k|portrait|portrait-4k|square|square-4k` [composition's own; shape must match the composition; not with `--hdr`], `--hdr` / `--sdr` [auto-detect], `--composition <file.html>` [index.html]. Leave an option out to keep Hyperframes' default; only pass what the user asked for. `-- <full command>` replaces them all (advanced). `--project <id or name>` picks a project explicitly; `--new` forces a new one.
 
 While uploading, a progress line shows percent, bytes, speed and ETA. **Ctrl+C cancels the upload**; files already sent stay on the VPS and are not sent again. If you run `hfr` in the background and must stop it, terminate the process; do not leave uploads running unattended.
 
 - `<project-dir>` is the folder containing `index.html` / `hyperframes.json`.
 - Sync skips `node_modules`, `.git` and anything in `.hfrignore` (gitignore syntax). If the project has old `renders/` or large unused footage, suggest adding them to `.hfrignore` before uploading; ask before editing user files. Files deleted locally are deleted from the project on the next sync.
-- Only `npx hyperframes render` with these options is accepted: `-c/--composition -o/--output -f/--fps -q/--quality --format -w/--workers --crf --video-bitrate --vp9-cpu-used --variables --variables-file --video-frame-format --gif-loop --hls-segment-seconds --hdr --sdr --quiet --strict --strict-all --gpu --browser-gpu --no-browser-gpu --best-effort --no-best-effort --strict-variables --lint-verbose`. Output/composition/variables-file paths must be relative to the project. Anything else is rejected with `400`; do not try to bypass it.
+- Only `npx hyperframes render` with these options is accepted: `-c/--composition -o/--output -f/--fps -q/--quality --resolution --format -w/--workers --crf --video-bitrate --vp9-cpu-used --variables --variables-file --video-frame-format --gif-loop --hls-segment-seconds --hdr --sdr --quiet --strict --strict-all --gpu --browser-gpu --no-browser-gpu --best-effort --no-best-effort --strict-variables --lint-verbose`. Output/composition/variables-file paths must be relative to the project. Anything else is rejected with `400`; do not try to bypass it.
 - Do not poll in a tight loop. For long renders use `--detach`, then check `hfr jobs --json` no more often than every 30-60 s, or run the blocking `hfr render` in the background.
 
 ### Reading state
@@ -108,6 +108,10 @@ hfr rm project <project>                  # delete a project with all renders an
 | `download verification failed` | Transfer corrupted; run `hfr pull` again. Nothing was deleted. |
 
 More: `docs/troubleshooting.md`.
+
+## Updating HFR Remote itself
+
+`hfr update --check --json` says whether a newer version exists (`available`, `latest`, `notes`); `hfr update` downloads, verifies and installs it (Windows closes the program and restarts it, so only run it when the user asked and nothing is in progress). The VPS agent is updated separately with `hfr setup` (only with the user's go-ahead, and never while a render is running).
 
 ## Safety and privacy
 

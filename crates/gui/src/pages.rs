@@ -391,6 +391,6 @@ impl HfrApp {
                 "Install and connect",
             )
         };
-        page.child(self.setup_form(title, sub, btn, cx))
+        page.child(self.setup_form(title, sub, btn, cx)).child(self.about_card(cx))
     }
 }

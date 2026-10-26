@@ -85,6 +85,55 @@ impl HdrMode {
     }
 }
 
+/// Output size presets of `hyperframes render --resolution`. The composition is unchanged: Chrome renders at a
+/// higher device scale, so the shape must match the composition and the scale must be a whole multiple.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Resolution {
+    Landscape,
+    Landscape4k,
+    Portrait,
+    Portrait4k,
+    Square,
+    Square4k,
+}
+
+impl Resolution {
+    pub const ALL: [Resolution; 6] = [
+        Resolution::Landscape,
+        Resolution::Landscape4k,
+        Resolution::Portrait,
+        Resolution::Portrait4k,
+        Resolution::Square,
+        Resolution::Square4k,
+    ];
+
+    pub fn flag(self) -> &'static str {
+        match self {
+            Resolution::Landscape => "landscape",
+            Resolution::Landscape4k => "landscape-4k",
+            Resolution::Portrait => "portrait",
+            Resolution::Portrait4k => "portrait-4k",
+            Resolution::Square => "square",
+            Resolution::Square4k => "square-4k",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Resolution::Landscape => "1080p landscape (1920 x 1080)",
+            Resolution::Landscape4k => "4K landscape (3840 x 2160)",
+            Resolution::Portrait => "1080p portrait (1080 x 1920)",
+            Resolution::Portrait4k => "4K portrait (2160 x 3840)",
+            Resolution::Square => "1080p square (1080 x 1080)",
+            Resolution::Square4k => "4K square (2160 x 2160)",
+        }
+    }
+
+    pub fn from_flag(s: &str) -> Option<Resolution> {
+        Resolution::ALL.into_iter().find(|r| r.flag() == s)
+    }
+}
+
 /// Frame rates offered in the UI; `None` keeps the composition's own `data-fps` (30 if unset).
 pub const FPS_CHOICES: [u32; 6] = [24, 25, 30, 50, 60, 120];
 
@@ -96,6 +145,8 @@ pub struct RenderOptions {
     /// `None` = let Hyperframes choose.
     pub workers: Option<u32>,
     pub hdr: HdrMode,
+    /// `None` = the composition's own size.
+    pub resolution: Option<Resolution>,
     /// Project-relative HTML file; `None` = `index.html`.
     pub composition: Option<String>,
     /// Command-line tokens this struct does not model, kept verbatim (see `from_command`).
@@ -117,6 +168,9 @@ impl RenderOptions {
         }
         if let Some(w) = self.workers {
             c.extend(["-w".into(), w.to_string()]);
+        }
+        if let Some(r) = self.resolution {
+            c.extend(["--resolution".into(), r.flag().into()]);
         }
         match self.hdr {
             HdrMode::Auto => {}
@@ -143,8 +197,10 @@ impl RenderOptions {
                 Some((n, v)) if tok.starts_with('-') => (n, Some(v.to_string())),
                 _ => (tok.as_str(), None),
             };
-            let known_value =
-                matches!(name, "--fps" | "-f" | "-q" | "--quality" | "--format" | "-w" | "--workers" | "-c" | "--composition");
+            let known_value = matches!(
+                name,
+                "--fps" | "-f" | "-q" | "--quality" | "--format" | "-w" | "--workers" | "-c" | "--composition" | "--resolution"
+            );
             let value = if known_value { inline.or_else(|| it.next().cloned()) } else { None };
             match (name, value) {
                 ("--fps" | "-f", Some(v)) => o.fps = v.parse().ok(),
@@ -152,6 +208,8 @@ impl RenderOptions {
                 ("--format", Some(v)) => o.format = Format::ALL.into_iter().find(|f| f.flag() == v).unwrap_or_default(),
                 ("-w" | "--workers", Some(v)) => o.workers = v.parse().ok(),
                 ("-c" | "--composition", Some(v)) => o.composition = Some(v),
+                ("--resolution", Some(v)) if Resolution::from_flag(&v).is_some() => o.resolution = Resolution::from_flag(&v),
+                ("--resolution", Some(v)) => o.extra.extend([name.to_string(), v]),
                 ("--hdr", _) => o.hdr = HdrMode::Hdr,
                 ("--sdr", _) => o.hdr = HdrMode::Sdr,
                 _ => o.extra.push(tok.clone()),
@@ -194,6 +252,7 @@ mod tests {
             format: Format::Webm,
             workers: Some(4),
             hdr: HdrMode::Sdr,
+            resolution: Some(Resolution::Landscape4k),
             composition: Some("compositions/intro.html".into()),
             ..Default::default()
         };
@@ -211,6 +270,8 @@ mod tests {
                 "webm",
                 "-w",
                 "4",
+                "--resolution",
+                "landscape-4k",
                 "--sdr",
                 "-c",
                 "compositions/intro.html"
@@ -245,9 +306,20 @@ mod allowlist_tests {
                     for hdr in HdrMode::ALL {
                         for workers in [None, Some(1), Some(8)] {
                             for composition in [None, Some("compositions/intro.html".to_string())] {
-                                let o = RenderOptions { fps, quality, format, workers, hdr, composition, extra: vec![] };
-                                let cmd = o.command();
-                                assert!(hfr_proto::validate_command(&cmd).is_ok(), "rejected: {cmd:?}");
+                                for resolution in std::iter::once(None).chain(Resolution::ALL.into_iter().map(Some)) {
+                                    let o = RenderOptions {
+                                        fps,
+                                        quality,
+                                        format,
+                                        workers,
+                                        hdr,
+                                        resolution,
+                                        composition: composition.clone(),
+                                        extra: vec![],
+                                    };
+                                    let cmd = o.command();
+                                    assert!(hfr_proto::validate_command(&cmd).is_ok(), "rejected: {cmd:?}");
+                                }
                             }
                         }
                     }
@@ -269,6 +341,7 @@ mod from_command_tests {
             format: Format::Webm,
             workers: Some(3),
             hdr: HdrMode::Hdr,
+            resolution: Some(Resolution::Portrait),
             composition: Some("compositions/intro.html".into()),
             extra: vec![],
         };

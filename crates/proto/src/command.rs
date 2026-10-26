@@ -9,6 +9,7 @@ const VALUE_FLAGS: &[&str] = &[
     "--fps",
     "-q",
     "--quality",
+    "--resolution",
     "--format",
     "-w",
     "--workers",

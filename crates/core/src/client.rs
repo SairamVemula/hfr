@@ -2,7 +2,9 @@ use std::{process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{bail, Context, Result};
 use futures_util::StreamExt;
-use hfr_proto::{CreateJob, CreateProject, DeletePaths, FileEntry, Job, Metrics, Project, ProjectView, SyncPlan, VersionInfo, API_VERSION};
+use hfr_proto::{
+    CreateJob, CreateProject, DeletePaths, FileEntry, Job, Metrics, Project, ProjectView, SyncPlan, VersionInfo, API_VERSION, MIN_API,
+};
 use reqwest::Method;
 use tokio_util::io::ReaderStream;
 
@@ -100,17 +102,21 @@ impl Client {
         self.json(Method::GET, "/version").await
     }
 
-    /// Fails with a clear message when the agent on the VPS speaks an older API.
-    pub async fn ensure_compatible(&self) -> Result<()> {
+    /// Fails with a clear message when the agent on the VPS speaks an API this app cannot use. Returns the agent's
+    /// version info (the app also warns when the agent is older than the app, even if still compatible).
+    pub async fn ensure_compatible(&self) -> Result<VersionInfo> {
         let r = self.req(Method::GET, "/version").send().await?;
         if r.status() == reqwest::StatusCode::NOT_FOUND {
-            bail!("the agent on the VPS is too old for this app (it speaks API 1, this app needs {API_VERSION}); upgrade it with `hfr setup` once no render is running");
+            bail!("the agent on the VPS is too old for this app (it speaks API 1, this app needs {MIN_API} or newer); upgrade it with `hfr setup` once no render is running");
         }
         let v: VersionInfo = Self::ok(r).await?.json().await?;
-        if v.api != API_VERSION {
-            bail!("the agent on the VPS speaks API {}, this app needs {API_VERSION}; upgrade it with `hfr setup`", v.api);
+        if v.api < MIN_API {
+            bail!("the agent on the VPS speaks API {}, this app needs {MIN_API} or newer; upgrade it with `hfr setup`", v.api);
         }
-        Ok(())
+        if v.api > API_VERSION {
+            bail!("the agent on the VPS speaks API {}, newer than this app understands ({API_VERSION}); update HFR Remote", v.api);
+        }
+        Ok(v)
     }
 
     // ---- projects and jobs ----------------------------------------------------------------------------

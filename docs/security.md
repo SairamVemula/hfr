@@ -31,6 +31,10 @@ Only `npx hyperframes render` with an allowlist of options; no shell is involved
 
 Archives are extracted in Rust (not with `tar`): only regular files and directories, only relative paths without `..`, no links or devices, permissions not preserved. Project and job ids are server-generated UUIDs and are checked against the store before any path is built from them. Sync paths are validated like archive entries, and the file download and delete routes only accept paths recorded as outputs of that job, so a client cannot read or delete source files or anything outside the project through them.
 
+## Updates
+
+The app can check GitHub for a newer release (Settings > *Check for updates automatically*; also `hfr update --check`). Only `api.github.com` and `github.com` are contacted, through the system `curl`, and the only thing sent is `User-Agent: hfr/<version>`. An update is never run unless the release's `SHA256SUMS` carries a valid ed25519 signature from a public key compiled into the app and the downloaded installer's SHA-256 matches the signed list; a mismatch deletes the file. A compromised GitHub account alone therefore cannot push a malicious update; the signing key (a GitHub Actions secret) is what must be protected. Windows SmartScreen may still warn about an installer that is not code-signed.
+
 ## Service sandbox
 
 The systemd unit runs as the unprivileged user `hfr` (no login shell, no sudo) with `NoNewPrivileges`, `ProtectSystem=strict` (read-only OS; writable only `/var/lib/hfr`), `PrivateTmp`, `ProtectHome`, kernel-tunable/module/cgroup protection, `RestrictSUIDSGID` and `LockPersonality`. Namespace restrictions are deliberately not applied, because Chrome needs them for its own sandbox.

@@ -9,6 +9,7 @@ pub mod render;
 pub mod setup;
 pub mod sync;
 pub mod transfer;
+pub mod update;
 
 pub use client::{Client, Tunnel};
 pub use config::{config_path, data_dir, Config};

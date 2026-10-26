@@ -67,7 +67,7 @@ The breadcrumb (*Projects › name*) takes you back. The header shows the size, 
   <img src="images/options.png" alt="Render options dialog" width="80%">
 </p>
 
-Composition (only when the project has other HTML files), frame rate, quality, format, colour range (auto / HDR / SDR) and parallel workers (with a hint about the VPS's cores and RAM). Every field starts at Hyperframes' default. A live line shows the exact command that will run.
+Composition (only when the project has other HTML files), frame rate, quality, format, colour range (auto / HDR / SDR), **resolution** (the composition's own size, or 1080p / 4K in landscape, portrait or square; the shape must match the composition and it cannot be combined with forced HDR, which the dialog points out) and parallel workers (with a hint about the VPS's cores and RAM). Every field starts at Hyperframes' default. A live line shows the exact command that will run.
 
 ## Deleting
 
@@ -118,6 +118,12 @@ Refreshed every 2 seconds:
 - **Your VPS**: host, user, "SSH tunnel to 127.0.0.1 only", where the token is kept (Windows Credential Manager, macOS Keychain, or an owner-only config file on Linux) and the config file path.
 - **Downloads**: the folder downloads go to (default `Downloads/HFR Remote`), with **Browse** and **Save**, and **Delete a file from the VPS after it was downloaded and verified** (on by default; only a verified file is ever deleted).
 - **Upgrade or reinstall the agent**: re-runs the installer, keeping your token and projects. It never interrupts a running render.
+
+## Updates
+
+On start-up and then at most once an hour the app asks GitHub whether a newer version exists (switch this off in **Settings > About and updates**, where **Check now** also lives). When there is one, a banner appears on every page: **Update now**, **What's new** (release notes), **Skip this version**, **Later**. **Update now** downloads the installer with a progress bar (percentage, speed, time left, Cancel), checks the signed checksums and the installer's SHA-256, and then offers **Restart and install** (Windows: the app closes, the installer runs silently and the app starts again; macOS and Linux open the verified file). Nothing is installed without that last click. Details: [security.md](security.md#updates).
+
+If the agent on your VPS is older than the app but still compatible, a softer banner offers **Upgrade agent**. An app update does not force a VPS upgrade unless the protocol changed.
 
 ## Notes
 

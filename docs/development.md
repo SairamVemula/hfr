@@ -67,6 +67,23 @@ Output lands in `dist/installers/`. Installers include both binaries and the two
 
 Tag and push: `git tag v0.1.0 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
 
+## Releasing and updates
+
+Installed apps look for a newer release on GitHub (`hfr-core/src/update.rs`), download the installer and run it only after two checks: the release's `SHA256SUMS` must carry a valid ed25519 signature (`SHA256SUMS.sig`) from a key built into the app (`PUBLIC_KEYS`), and the installer's SHA-256 must be listed in it. Windows installs silently and restarts the app; macOS and Linux open the verified file.
+
+**Signing key (one time).** `cargo run -p hfr-core --example release_key -- keygen <file>` writes the private key to `<file>` and prints the public key. Put the public key into `PUBLIC_KEYS` (several are allowed, which is how a key is rotated: ship the new public key in release N, sign release N+1 with the new private key), and the file's content into the repository secret `HFR_UPDATE_KEY`. Back the private key up somewhere safe; if it is lost, users must install one release by hand.
+
+**Release checklist**
+
+1. Bump `version` in `Cargo.toml` (workspace) and `Packager.toml`; add the CHANGELOG entry (the app shows the release notes).
+2. If the agent protocol changed incompatibly, bump `API_VERSION` and `MIN_API` in `crates/proto/src/lib.rs` (and the marker follows automatically).
+3. `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
+4. Commit, then tag `vX.Y.Z` and push the tag (only when you decide to release).
+5. The workflow checks tag == versions, rebuilds and checks the bundled agents, builds the installers into a **draft** release, then `sign-and-publish` writes and signs `SHA256SUMS` and publishes. Apps never see an unsigned release.
+6. On a machine with the previous version: Settings > Check now, update, confirm the new version and that the agent notice (if any) behaves.
+
+**Testing updates locally** (debug builds only): serve a folder with a `latest` JSON (GitHub's `releases/latest` shape), an installer, `SHA256SUMS` and `SHA256SUMS.sig`; run with `HFR_UPDATE_URL=http://127.0.0.1:8765/latest`, `HFR_UPDATE_PUBKEY=<test public key>` and `HFR_UPDATE_NO_INSTALL=1`, and use a throw-away `HFR_CONFIG`.
+
 ## Branding assets
 
 `assets/branding/icon.svg` and `mark.svg` are the source. Regenerate the PNG/ICO/ICNS set with any SVG rasteriser; the committed files were produced with `@resvg/resvg-js` and `png2icons`. The colour palette lives in `crates/gui/src/theme.rs`.
@@ -107,7 +124,7 @@ scripts/e2e-agent.sh           API checks against a Linux agent binary (fake npx
 - Keep the agent API additive; clients and agents of different versions should keep working where possible.
 - New agent endpoints must go behind the auth middleware and validate any project or job id against the store, and any `?path=` against the recorded files or `safety.rs` rules, before building paths. Bump `API_VERSION` for breaking changes.
 - Anything that executes input needs an allowlist and a test (`crates/proto/src/command.rs` for commands, `crates/agent/src/safety.rs` for archives and tokens).
-- No network calls other than to the user's own VPS (and the installer's package downloads).
+- No network calls other than to the user's own VPS, the installer's package downloads on the VPS, and the update check (`api.github.com` / `github.com`, via the system `curl`, sending only a `User-Agent: hfr/<version>`). Keep it that way and keep it switchable (`check_updates` / Settings).
 - Match the surrounding style; run `cargo fmt` and `cargo clippy` before sending a PR.
 
 ## Gotchas learned the hard way

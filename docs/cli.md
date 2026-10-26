@@ -8,6 +8,9 @@ hfr <command> [options]
 
 ## Commands
 
+### `hfr update [--check] [--json]`
+Looks for a newer release of hfr on GitHub. `--check` only reports (`--json` prints `{current, latest, available, notes}`). Without `--check` it downloads the installer, verifies the signed checksums and the installer's SHA-256 (see [security.md](security.md#updates)), then installs it (Windows: silently, the program ends and starts again; macOS/Linux: opens the verified file). `hfr status` also prints one line when the last check found a newer version. The VPS agent is updated separately with `hfr setup`.
+
 ### `hfr setup`
 Installs everything on the VPS, and upgrades it later. **Safe to re-run:** each step first checks what is already there and only installs what is missing or outdated (system packages, Node 22, hyperframes, Chrome, the agent). It never interrupts a running render: while a render is running, or while render folders of an older agent version that cannot be migrated are still on the VPS, the hyperframes and agent upgrades are postponed with a note, and the next run picks them up. See [getting-started.md](getting-started.md#4-install-the-agent-on-the-vps).
 
@@ -45,6 +48,7 @@ While uploading it prints one progress line with speed and time left (`Uploading
 | `--format <mp4\|webm\|mov\|gif>` | `mp4` | Output format (`webm` and `mov` keep transparency) |
 | `--workers <n>` | auto | Parallel Chrome workers; each needs about 256 MB RAM |
 | `--hdr` / `--sdr` | auto-detect | Force HDR or SDR |
+| `--resolution <preset>` | composition's own | Output size: `landscape` (1920x1080), `landscape-4k`, `portrait` (1080x1920), `portrait-4k`, `square` (1080x1080), `square-4k`. The shape must match the composition; not available with `--hdr` |
 | `--composition <file.html>` | `index.html` | Render another HTML file of the project |
 | `--project <id\|name>` | the project remembered for `dir` | Render in this project |
 | `--new` | off | Always create a new project for this folder |

@@ -22,6 +22,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: The tag must match the version in Cargo.toml and Packager.toml
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_v=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          pack_v=$(grep -m1 '^version' Packager.toml | cut -d'"' -f2)
+          echo "tag=$tag Cargo.toml=$cargo_v Packager.toml=$pack_v"
+          [ "$tag" = "$cargo_v" ] && [ "$tag" = "$pack_v" ] || { echo "version mismatch"; exit 1; }
       - uses: dtolnay/rust-toolchain@stable
       - name: Linux GUI dependencies
         if: runner.os == 'Linux'
@@ -32,10 +40,52 @@ jobs:
       - name: Build and stage the Linux agents (bundled so `hfr setup` works offline)
         shell: bash
         run: scripts/stage-agents.sh
+      - name: Every bundled agent must speak the current API
+        shell: bash
+        run: |
+          api=$(grep -m1 'pub const API_VERSION' crates/proto/src/lib.rs | grep -o '[0-9]*;' | tr -d ';')
+          for f in dist/agents/*/hfr-agent; do
+            grep -q "hfr-agent-api=$api" "$f" || { echo "$f is stale (needs hfr-agent-api=$api)"; exit 1; }
+          done
       - run: cargo build --release -p hfr-cli -p hfr-gui
       - run: cargo install cargo-packager --locked
       - run: cargo packager --release -c Packager.toml --formats ${{ matrix.formats }}
+      # A draft: the app only sees a release once it is signed and published by the job below.
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/installers/*
           generate_release_notes: true
+          draft: true
+
+  # Signs the list of checksums with the update key and publishes the release. Installed apps verify this
+  # signature before they run a downloaded installer (see docs/development.md).
+  sign-and-publish:
+    needs: installers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Download the installers of this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir assets
+          gh release download "$GITHUB_REF_NAME" --dir assets --pattern '*' --clobber
+          ls -l assets
+      - name: Checksums and signature
+        env:
+          HFR_UPDATE_KEY: ${{ secrets.HFR_UPDATE_KEY }}
+        run: |
+          test -n "$HFR_UPDATE_KEY" || { echo "secret HFR_UPDATE_KEY is not set"; exit 1; }
+          cd assets
+          rm -f SHA256SUMS SHA256SUMS.sig
+          sha256sum * > SHA256SUMS
+          cd ..
+          cargo run -q -p hfr-core --example release_key -- sign assets/SHA256SUMS assets/SHA256SUMS.sig
+          cargo run -q -p hfr-core --example release_key -- verify assets/SHA256SUMS assets/SHA256SUMS.sig
+      - name: Attach the signed checksums and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" assets/SHA256SUMS assets/SHA256SUMS.sig --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false

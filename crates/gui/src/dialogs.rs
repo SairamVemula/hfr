@@ -2,7 +2,7 @@
 
 use gpui_kit::component::select::{Select, SelectItem, SelectState};
 use gpui_kit::component::IndexPath;
-use hfr_core::render::{find_compositions, Format, HdrMode, Quality, RenderOptions, FPS_CHOICES};
+use hfr_core::render::{find_compositions, Format, HdrMode, Quality, RenderOptions, Resolution, FPS_CHOICES};
 use hfr_proto::OutputFile;
 
 use super::*;
@@ -61,6 +61,7 @@ pub struct OptionsDialog {
     format: Sel,
     workers: Sel,
     hdr: Sel,
+    resolution: Sel,
     comp: Sel,
     has_comps: bool,
     cores: usize,
@@ -84,6 +85,7 @@ impl OptionsDialog {
             quality: Quality::ALL.into_iter().find(|q| q.flag() == selected(&self.quality, cx)).unwrap_or_default(),
             format: Format::ALL.into_iter().find(|f| f.flag() == selected(&self.format, cx)).unwrap_or_default(),
             workers: workers.parse().ok(),
+            resolution: Resolution::from_flag(&selected(&self.resolution, cx)),
             hdr: match selected(&self.hdr, cx).as_str() {
                 "hdr" => HdrMode::Hdr,
                 "sdr" => HdrMode::Sdr,
@@ -240,6 +242,8 @@ impl HfrApp {
                 workers.len() - 1
             }
         };
+        let mut resolution = vec![(String::new(), "Composition's own size (default)".to_string())];
+        resolution.extend(Resolution::ALL.iter().map(|r| (r.flag().to_string(), r.label().to_string())));
         let hdr = HdrMode::ALL
             .iter()
             .map(|h| {
@@ -262,6 +266,12 @@ impl HfrApp {
             format: make_sel(window, cx, format, Format::ALL.iter().position(|f| *f == initial.format).unwrap_or(0)),
             workers: make_sel(window, cx, workers, workers_idx),
             hdr: make_sel(window, cx, hdr, HdrMode::ALL.iter().position(|h| *h == initial.hdr).unwrap_or(0)),
+            resolution: make_sel(
+                window,
+                cx,
+                resolution,
+                initial.resolution.and_then(|r| Resolution::ALL.iter().position(|x| *x == r)).map(|i| i + 1).unwrap_or(0),
+            ),
             comp: make_sel(window, cx, comp, comp_idx),
             kept_comp: initial.composition.clone(),
             extra: initial.extra.clone(),
@@ -798,7 +808,19 @@ impl HfrApp {
                 "Auto uses HDR if the sources are HDR.",
                 &o.hdr,
             )))
-            .child(field("Parallel workers", workers_hint, &o.workers))
+            .child(
+                div()
+                    .h_flex()
+                    .gap_3()
+                    .items_start()
+                    .child(half("Resolution", "Must have the same shape as the composition. Not available with HDR.", &o.resolution))
+                    .child(field("Parallel workers", workers_hint, &o.workers).flex_1().min_w_0()),
+            )
+            .when(opts.resolution.is_some() && opts.hdr == HdrMode::Hdr, |d| {
+                d.child(div().text_sm().text_color(theme::warning()).child(
+                    "Hyperframes does not support a resolution preset together with forced HDR. Choose SDR or the composition's own size.",
+                ))
+            })
             .children(sync_row)
             .child(
                 div()

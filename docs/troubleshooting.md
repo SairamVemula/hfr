@@ -59,6 +59,10 @@ Size or SHA-256 differed from what the VPS reported. The partial file is deleted
 
 Run the same `hfr pull <job>` again, or press **Resume** on the transfer in the app: it continues from the `<file>.hfrpart` already on disk instead of starting over. **Discard** (or deleting the `.hfrpart` and `.hfrpart.json` files) throws the partial file away.
 
+## Updates: "the signature of the release does not match a trusted key" or "does not match the signed checksum"
+
+The app refused a download it could not verify, and deleted it. Try again in a minute (a release may have been half uploaded); if it persists, download the installer from the [Releases page](https://github.com/SairamVemula/hfr/releases) by hand and report it. "`curl` was not found": install curl or download manually. An offline machine simply skips the automatic check.
+
 ## "agent API 1 is too old" / the app asks to upgrade the agent
 
 This version of `hfr` and the app talk to agent API 2 (projects, renders and files). The agent on your VPS is older. Run `hfr setup --host ... --user ...` (or **Upgrade agent** in Settings). The upgrade keeps your token, and renders from the old layout appear as projects with one render each. If a render is running, setup postpones the upgrade (see below): wait for it to finish and download its video with the *old* tools first if you want, then upgrade.
