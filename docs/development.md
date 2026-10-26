@@ -57,7 +57,7 @@ cargo install cargo-packager --locked
 bash scripts/stage-agents.sh
 cargo build --release -p hfr-cli -p hfr-gui
 cargo packager --release -c Packager.toml --formats nsis            # Windows installer
-cargo packager --release -c Packager.toml --formats dmg             # macOS (not part of the GitHub release workflow)
+cargo packager --release -c Packager.toml --formats dmg             # macOS
 cargo packager --release -c Packager.toml --formats appimage,deb    # Linux
 ```
 
@@ -65,7 +65,7 @@ Output lands in `dist/installers/`. Installers include both binaries and the two
 
 ### Releasing
 
-Tag and push: `git tag v0.1.1 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
+Tag and push: `git tag v0.1.2 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
 
 ## Releasing and updates
 

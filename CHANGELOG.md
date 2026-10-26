@@ -7,10 +7,12 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 ### Changed
 - **Rebranded as HFR** (Hyperframes Render): new logo (an H of two film strips with a play button), new app icon and a full brand kit (`assets/branding`: colourways, dark/light/mono marks, wordmark lockups, GitHub social preview), generated from one source by `node build.mjs`. The product name is now "HFR" everywhere it is shown (window title, installer, download folder `Downloads/HFR`). If you installed an earlier build, uninstall "HFR Remote" first.
 
-## [0.1.1] - 2026-10-26
+## [0.1.2] - 2026-10-26
+
+(`v0.1.1` was tagged but its release workflow failed before publishing anything; this is the first published release.)
 
 ### Distribution
-- Releases carry installers for **Windows (x64, ARM64)** and **Linux (x64, ARM64)**; macOS is not built in releases. ARM64 builds run on GitHub's native ARM runners and are allowed to fail without blocking the x64 release. The update check only offers an installer for the computer's own CPU architecture.
+- Releases carry installers for **Windows (x64, ARM64)**, **Linux (x64, ARM64)** and **macOS (Apple Silicon, Intel)**. Every build except Windows x64 and Linux x64 is marked experimental: it may fail without blocking the release. The update check only offers an installer for the computer's own CPU architecture.
 - Fixed the release workflow (the agent staging script was not executable in git).
 
 ### Changed (breaking: agent API 2)

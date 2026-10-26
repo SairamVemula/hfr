@@ -12,7 +12,7 @@ The installer needs `apt`. Other distributions are not supported yet.
 
 ## 1. Install HFR
 
-Download an installer from the [releases page](https://github.com/SairamVemula/hfr/releases) (Windows x64 and ARM64 `.exe`, Linux x64 and ARM64 `.AppImage` / `.deb`; there is no macOS installer in releases yet, build from source with `cargo build --release -p hfr-gui` and `cargo packager ... --formats dmg`). It installs the desktop app (`hfr-gui`) and the command line (`hfr`) together, and bundles the Linux agent that gets uploaded to your VPS. On Windows the CLI is `hfr.exe` in the install folder; add that folder to your `PATH` to run `hfr` from any terminal.
+Download an installer from the [releases page](https://github.com/SairamVemula/hfr/releases) (Windows x64 and ARM64 `.exe`, macOS Apple Silicon and Intel `.dmg`, Linux x64 and ARM64 `.AppImage` / `.deb`). It installs the desktop app (`hfr-gui`) and the command line (`hfr`) together, and bundles the Linux agent that gets uploaded to your VPS. On Windows the CLI is `hfr.exe` in the install folder; add that folder to your `PATH` to run `hfr` from any terminal.
 
 Or build from source: see [development.md](development.md).
 
