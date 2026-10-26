@@ -6,7 +6,7 @@
 #               cargo packager --release -c Packager.toml --formats appimage,deb   (Linux)
 name = "hfr-remote"
 product-name = "HFR"
-version = "0.1.2"
+version = "0.1.3"
 identifier = "dev.hfr.remote"
 description = "Render Hyperframes projects on your own VPS"
 long-description = "Push a Hyperframes project to your VPS, watch the render and the server's health live, download the verified video, and free the space - from a desktop app or the hfr command line."

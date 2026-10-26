@@ -64,7 +64,7 @@ Percentages are 0-100; sizes are bytes. `disk_*` describes the largest filesyste
 
 | Method and path | Purpose | Success |
 | --- | --- | --- |
-| `GET /version` | `{ "api": 2, "agent": "0.1.2" }` | `200` |
+| `GET /version` | `{ "api": 2, "agent": "0.1.3" }` | `200` |
 | `GET /status` | `{ "running_jobs": n, "queued_jobs": n, "max_concurrent": n, "projects": n }` (the installer uses it to see whether the VPS is busy) | `200` |
 | `GET /settings` | The render limit: `{ "max_concurrent": n or null, "effective": n, "auto": n }` | `200` |
 | `PUT /settings` | Body `{ "max_concurrent": 1-64 }` or `null` for automatic. Takes effect at once: a higher limit starts waiting renders, a lower one lets running renders finish before more start. Saved in `settings.json` | `200` Settings |
