@@ -4,6 +4,9 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+- **Render queue.** The agent now runs a limited number of renders at once; the rest wait as `queued` (with their place in line) and start by themselves, oldest first, one render per project. The limit is chosen automatically from the VPS (one per 4 CPU cores and 4 GiB of memory, at least 1) and can be changed in the app (VPS > Render queue), with `hfr limit`, or `PUT /settings`. A project no longer rejects a second render while one runs: it queues. Queued renders survive an agent restart; the installer counts them as busy. App: *Queued* pill, queue notice, Remove from queue. CLI: `hfr queue`, `hfr limit`, waiting/started messages in `hfr render`. Agent API 3 (`MIN_API` stays 2: a new app works with an older agent, which simply has no queue).
+
 ### Changed
 - **Rebranded as HFR** (Hyperframes Render): new logo (an H of two film strips with a play button), new app icon and a full brand kit (`assets/branding`: colourways, dark/light/mono marks, wordmark lockups, GitHub social preview), generated from one source by `node build.mjs`. The product name is now "HFR" everywhere it is shown (window title, installer, download folder `Downloads/HFR`). If you installed an earlier build, uninstall "HFR Remote" first.
 

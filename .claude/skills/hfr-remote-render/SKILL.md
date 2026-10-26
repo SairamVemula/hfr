@@ -58,6 +58,10 @@ hfr logs <job>          # whole log;  hfr logs <job> -f  follows a running rende
 
 Render `state`: `running` -> `done` | `failed` | `cancelled`. A render's options are the arguments in its `command`. Progress lines in logs look like `@hf-progress {"code":"capture","pct":55}`.
 
+## The queue
+
+A VPS runs a limited number of renders at once (`hfr limit` shows it; automatic = one per 4 CPU cores and 4 GiB). Starting another render is fine: it waits (`state: "queued"`, `queue_position`) and starts by itself, oldest first; one render per project at a time. `hfr queue [--json]` lists running and waiting renders. `hfr render` waits and follows it (use `--detach` to return at once). Do not raise the limit (`hfr limit N`) without the user's say: parallel renders slow each other down and can run the VPS out of memory.
+
 ## Cancelling and rendering again
 
 ```bash
@@ -66,7 +70,7 @@ hfr render <dir> --like <job> --quality delivery --fps 60 # a NEW render in the 
 ```
 
 - Rendering again always creates a new render; it syncs only what you changed. Use it for "that looked wrong, try again at 60 fps" or "it ran out of memory, use fewer workers".
-- A project runs one render at a time: `cancel` the running one first (the CLI reports a conflict otherwise).
+- A project runs one render at a time; starting another in the same project queues it behind the running one (no need to cancel). Cancel the running one only if the user wants it stopped.
 - **Only cancel a render the user asked you to.** A cancelled render loses its progress, and the VPS may be running the user's other renders; check `hfr jobs --json` and never touch a render you did not start.
 - A render that was running when the agent restarted shows as `failed`; render again to retry.
 
@@ -102,7 +106,7 @@ hfr rm project <project>                  # delete a project with all renders an
 | `agent ... too old ... API 1` | Old agent on the VPS. Ask the user to run `hfr setup` when no render is running. |
 | `timed out waiting for ssh tunnel` | Network down or the VPS unreachable; check `ssh user@host echo ok` and retry. |
 | `agent returned 400 ... not allowed` | Option outside the allowlist. Use only the options listed above. |
-| `agent returned 409` | A render is already running in that project (cancel it or wait), or the project has no files yet. |
+| `agent returned 409` | The project has no files yet or its files are being synced, or you tried to sync / delete a project while one of its renders runs. (A second render does not conflict: it queues.) |
 | `unsafe path in archive` | Project contains symlinks/odd files. Add them to `.hfrignore`. |
 | Render `failed` | `hfr logs <job>`; common: out of memory (use `-w 2`), assets outside the project folder, missing fonts. |
 | `download verification failed` | Transfer corrupted; run `hfr pull` again. Nothing was deleted. |

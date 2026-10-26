@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Version of the HTTP API. Clients check it and refuse to talk to an older agent.
-pub const API_VERSION: u32 = 2;
+pub const API_VERSION: u32 = 3;
 
 /// Oldest agent API this client still works with. Raise it only when support for an older protocol is dropped; an
 /// app update then does not force an upgrade of the VPS agent.
@@ -9,7 +9,7 @@ pub const MIN_API: u32 = 2;
 
 /// Text compiled into every agent binary (`hfr-agent-api=<version>`) so a client can tell which API a Linux binary
 /// speaks without running it. Keep in step with `API_VERSION` (a test checks it).
-pub const AGENT_MARKER: &str = "hfr-agent-api=2";
+pub const AGENT_MARKER: &str = "hfr-agent-api=3";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,6 +35,8 @@ pub struct Project {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobState {
+    /// Waiting for a free slot (the VPS only runs a limited number of renders at once).
+    Queued,
     Running,
     Done,
     Failed,
@@ -44,7 +46,7 @@ pub enum JobState {
 
 impl JobState {
     pub fn is_terminal(self) -> bool {
-        !matches!(self, JobState::Running)
+        !matches!(self, JobState::Running | JobState::Queued)
     }
 }
 
@@ -72,6 +74,9 @@ pub struct Job {
     pub started_unix: Option<u64>,
     pub finished_unix: Option<u64>,
     pub files: Vec<OutputFile>,
+    /// 1 = next to start. Only set (by the agent, when answering) while the job is `queued`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_position: Option<u32>,
 }
 
 /// A project with all its jobs: what the app shows, fetched in one call.
@@ -137,7 +142,39 @@ pub struct VersionInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Status {
     pub running_jobs: usize,
+    #[serde(default)]
+    pub queued_jobs: usize,
+    /// How many renders may run at the same time.
+    #[serde(default)]
+    pub max_concurrent: u32,
     pub projects: usize,
+}
+
+/// The render queue's limit. `max_concurrent` is what the user chose (`None` = automatic).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Settings {
+    pub max_concurrent: Option<u32>,
+    /// What is in effect now: the choice, or `auto` when there is none.
+    pub effective: u32,
+    /// What automatic mode picks for this VPS (from its CPU cores and memory).
+    pub auto: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetSettings {
+    pub max_concurrent: Option<u32>,
+}
+
+/// Largest limit the agent accepts.
+pub const MAX_CONCURRENT_LIMIT: u32 = 64;
+
+/// How many renders a VPS should run at once by default. One render already starts a Chrome per CPU core, so
+/// parallel renders mostly compete; the default only goes above one on big machines: a render per 4 cores and
+/// per 4 GiB of memory, at least 1.
+pub fn default_max_jobs(cores: usize, mem_total_bytes: u64) -> u32 {
+    let by_cpu = (cores / 4) as u64;
+    let by_mem = mem_total_bytes / (4u64 << 30);
+    by_cpu.min(by_mem).clamp(1, MAX_CONCURRENT_LIMIT as u64) as u32
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +201,26 @@ mod tests {
     use super::*;
 
     const _: () = assert!(MIN_API >= 1 && MIN_API <= API_VERSION);
+
+    #[test]
+    fn default_parallelism_scales_with_the_machine() {
+        let gib = 1u64 << 30;
+        assert_eq!(default_max_jobs(1, gib), 1);
+        assert_eq!(default_max_jobs(6, 12 * gib), 1);
+        assert_eq!(default_max_jobs(8, 16 * gib), 2);
+        assert_eq!(default_max_jobs(16, 32 * gib), 4);
+        // Memory limits it even with many cores.
+        assert_eq!(default_max_jobs(32, 8 * gib), 2);
+        assert_eq!(default_max_jobs(0, 0), 1);
+        assert_eq!(default_max_jobs(4096, u64::MAX), MAX_CONCURRENT_LIMIT);
+    }
+
+    #[test]
+    fn queued_is_not_terminal_and_old_status_json_still_parses() {
+        assert!(!JobState::Queued.is_terminal() && !JobState::Running.is_terminal() && JobState::Done.is_terminal());
+        let s: Status = serde_json::from_str(r#"{"running_jobs":1,"projects":2}"#).unwrap();
+        assert_eq!((s.queued_jobs, s.max_concurrent), (0, 0));
+    }
 
     #[test]
     fn agent_marker_matches_api_version() {

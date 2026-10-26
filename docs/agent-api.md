@@ -51,7 +51,7 @@ Plain-text bodies with these statuses: `400` bad input (disallowed command, unsa
   "files": [ { "path": "renders/intro.mp4", "name": "intro.mp4", "size": 29238, "created_unix": 1792998840, "sha256": "ab12..." } ]
 }
 ```
-`state`: `running`, `done`, `failed`, `cancelled`. `files[].sha256` is `null` for a moment after the job ends (hashing a big file takes time). The options of a job are the ones in `command`.
+`state`: `queued`, `running`, `done`, `failed`, `cancelled`. A `queued` job also has `queue_position` (1 = next to start). `files[].sha256` is `null` for a moment after the job ends (hashing a big file takes time). The options of a job are the ones in `command`.
 
 ### Metrics
 ```json
@@ -65,7 +65,9 @@ Percentages are 0-100; sizes are bytes. `disk_*` describes the largest filesyste
 | Method and path | Purpose | Success |
 | --- | --- | --- |
 | `GET /version` | `{ "api": 2, "agent": "0.1.2" }` | `200` |
-| `GET /status` | `{ "running_jobs": n, "projects": n }` (used by the installer to see whether the VPS is busy) | `200` |
+| `GET /status` | `{ "running_jobs": n, "queued_jobs": n, "max_concurrent": n, "projects": n }` (the installer uses it to see whether the VPS is busy) | `200` |
+| `GET /settings` | The render limit: `{ "max_concurrent": n or null, "effective": n, "auto": n }` | `200` |
+| `PUT /settings` | Body `{ "max_concurrent": 1-64 }` or `null` for automatic. Takes effect at once: a higher limit starts waiting renders, a lower one lets running renders finish before more start. Saved in `settings.json` | `200` Settings |
 | `GET /overview` | Every project with its jobs in one call: `[{ "project": Project, "jobs": [Job] }]`, newest first | `200` |
 | `GET /metrics` | Server metrics (samples CPU over ~200 ms) | `200` Metrics |
 | `GET /projects` | List projects | `200` `[Project]` |
@@ -76,16 +78,25 @@ Percentages are 0-100; sizes are bytes. `disk_*` describes the largest filesyste
 | `POST /projects/{p}/sync/plan` | Body: the client's manifest. Answer: `{ "upload": [paths], "delete": [paths] }`. Only files that came from an earlier sync can be in `delete`; render outputs never are | `200` |
 | `PUT /projects/{p}/sync` | Upload **only the files in `upload`** as a raw **tar** body (streamed, no size limit). They are extracted over the project and the manifest is updated. `409` while a job runs | `204` |
 | `POST /projects/{p}/sync/delete` | Body `{ "paths": [...] }`: remove files that no longer exist locally | `204` |
-| `POST /projects/{p}/jobs` | Create **and start** a job. Body `{ "command": ["npx","hyperframes","render", ...] }` (allowlist below). `409` if a job is running or the project has no files | `200` Job |
+| `POST /projects/{p}/jobs` | Create a job. It starts at once if a slot is free, otherwise it is `queued` (see below). Body `{ "command": ["npx","hyperframes","render", ...] }` (allowlist below). `409` if the project has no files or its files are being synced | `200` Job |
 | `GET /projects/{p}/jobs` | Jobs of the project, newest first | `200` `[Job]` |
 | `GET /projects/{p}/jobs/{j}` | One job | `200` Job |
-| `POST /projects/{p}/jobs/{j}/cancel` | Stop a running render and its whole process tree (SIGTERM to the process group, SIGKILL after 5 s). The job becomes `cancelled`. `409` if it is not running | `202` |
+| `POST /projects/{p}/jobs/{j}/cancel` | Take a `queued` job out of the queue (it becomes `cancelled` without ever running), or stop a running render and its whole process tree (SIGTERM to the process group, SIGKILL after 5 s). The job becomes `cancelled`. `409` if it is not running | `202` |
 | `DELETE /projects/{p}/jobs/{j}` | Remove the job, its log and its recorded output files. The project's own files stay. `409` while running | `204` |
 | `GET /projects/{p}/jobs/{j}/logs` | **Server-Sent Events**: one `data: <line>` event per output line, from the moment you connect | `200` stream |
 | `GET /projects/{p}/jobs/{j}/log` | The whole log so far as text (works after the job ended) | `200` text |
 | `GET /projects/{p}/jobs/{j}/files` | Output files of the job | `200` `[OutputFile]` |
 | `GET /projects/{p}/jobs/{j}/file?path=...` | Download one output file. Supports `Range: bytes=N-` (`206`, `Content-Range`, `Accept-Ranges: bytes`) so an interrupted download can resume | `200` / `206` bytes |
 | `DELETE /projects/{p}/jobs/{j}/file?path=...` | Delete one recorded output file. Any other path is `404`; this can never remove a source file | `204` |
+
+## The render queue
+
+The agent runs at most `effective` renders at the same time (`GET /settings`). By default that is chosen from the VPS: one render per 4 CPU cores and per 4 GiB of memory, at least 1, because a single Hyperframes render already starts a Chrome per core and parallel renders mostly share the same CPU. `HFR_MAX_JOBS` sets the starting value on a machine with no saved choice; `PUT /settings` changes it later.
+
+- A new job is `queued` and starts when fewer than the limit are running **and** no other render of the same project is running (one per project, which keeps output files attributable). Waiting jobs start oldest first; a job that cannot start yet (its project is busy) does not block the ones behind it.
+- A render waiting in the queue uses the project's files as they are when it starts. Syncing is refused while a render of that project runs (`409`), not while one waits.
+- Queued jobs survive an agent restart and start again afterwards. A render that was `running` at that moment becomes `failed`, as before.
+- Deleting a project removes its queued jobs too.
 
 ## Command allowlist
 

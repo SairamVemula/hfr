@@ -42,7 +42,8 @@ if [ -s /etc/hfr/agent.env ] || $SUDO test -s /etc/hfr/agent.env 2>/dev/null; th
     # Agent API 2 answers /status; an older agent only knows /jobs.
     STATUS=$(curl -fsS -m 5 -H "Authorization: Bearer $TOKEN_NOW" http://127.0.0.1:7878/status 2>/dev/null || true)
     if [ -n "$STATUS" ]; then
-      echo "$STATUS" | grep -Eq '"running_jobs": *[1-9]' && BUSY=1
+      # A render waiting in the queue counts too: upgrading now would restart the agent and delay it.
+      echo "$STATUS" | grep -Eq '"(running|queued)_jobs": *[1-9]' && BUSY=1
     else
       curl -fsS -m 5 -H "Authorization: Bearer $TOKEN_NOW" http://127.0.0.1:7878/jobs 2>/dev/null | grep -q '"state":"running"' && BUSY=1
     fi

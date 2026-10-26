@@ -23,7 +23,7 @@ SHIM
 chmod +x $W/shim/npx
 
 start_agent() {
-  env "PATH=$W/shim:/usr/local/bin:/usr/bin:/bin" HFR_TOKEN=t HFR_ROOT=$W/data HFR_ADDR=127.0.0.1:7897 $W/hfr-agent >$W/agent.log 2>&1 &
+  env "PATH=$W/shim:/usr/local/bin:/usr/bin:/bin" HFR_TOKEN=t HFR_MAX_JOBS=${MAXJOBS:-2} HFR_ROOT=$W/data HFR_ADDR=127.0.0.1:7897 $W/hfr-agent >$W/agent.log 2>&1 &
   APID=$!; sleep 1.2
 }
 stop_agent() { kill $APID 2>/dev/null; wait $APID 2>/dev/null; }
@@ -33,7 +33,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' -H "$H" "$@"; }
 J='content-type: application/json'
 
 echo "== setup"; start_agent
-check "version api" "$(api $U/version | jget 'd["api"]')" 2
+check "version api" "$(api $U/version | jget 'd["api"]')" 3
 
 echo "== project + delta sync"
 mkdir -p $W/src/assets && echo '<html>one</html>' > $W/src/index.html && echo 'alpha' > $W/src/assets/a.txt && echo 'beta' > $W/src/b.txt
@@ -100,10 +100,15 @@ check "project still has its source files" "$([ -e $W/data/$PID/project/index.ht
 echo "== cancel + one-running-job rule + delete guard"
 touch $W/data/$PID/project/slow
 J3=$(api -H "$J" -d '{"command":["npx","hyperframes","render"]}' $U/projects/$PID/jobs | jget 'd["id"]'); sleep 1
-check "second render while one runs -> 409" "$(code -H "$J" -d '{"command":["npx","hyperframes","render"]}' $U/projects/$PID/jobs)" 409
+J4=$(api -H "$J" -d '{"command":["npx","hyperframes","render","--fps","24"]}' $U/projects/$PID/jobs | jget 'd["id"]')
+check "a second render in the same project waits in the queue" "$(api $U/projects/$PID/jobs/$J4 | jget 'd["state"]')" queued
+check "it knows its place in line" "$(api $U/projects/$PID/jobs/$J4 | jget 'd["queue_position"]')" 1
+check "status counts running and queued" "$(api $U/status | jget '[d["running_jobs"],d["queued_jobs"],d["max_concurrent"]]')" "[1, 1, 2]"
 check "cannot delete a running job" "$(code -X DELETE $U/projects/$PID/jobs/$J3)" 409
 check "cannot delete a project with a running job" "$(code -X DELETE $U/projects/$PID)" 409
 check "cannot sync while running" "$(code -X PUT --data-binary @$W/up2.tar $U/projects/$PID/sync)" 409
+check "cancel a queued render (it never runs)" "$(code -X POST $U/projects/$PID/jobs/$J4/cancel)" 202
+check "queued render is cancelled" "$(api $U/projects/$PID/jobs/$J4 | jget 'd["state"]')" cancelled
 check "cancel" "$(code -X POST $U/projects/$PID/jobs/$J3/cancel)" 202
 sleep 1.5
 check "job 3 cancelled" "$(api $U/projects/$PID/jobs/$J3 | jget 'd["state"]')" cancelled
@@ -113,7 +118,7 @@ rm -f $W/data/$PID/project/slow
 echo "== restart: everything comes back"
 stop_agent; start_agent
 check "project restored" "$(api $U/projects | jget 'len(d)')" 1
-check "jobs restored" "$(api $U/projects/$PID/jobs | jget 'len(d)')" 2
+check "jobs restored" "$(api $U/projects/$PID/jobs | jget 'len(d)')" 3
 check "cancelled state kept" "$(api $U/projects/$PID/jobs/$J3 | jget 'd["state"]')" cancelled
 check "manifest kept (plan still empty)" "$(plan | jget 'len(d["upload"])+len(d["delete"])')" 0
 echo "agent log: $(head -1 $W/agent.log)"
@@ -131,6 +136,40 @@ check "legacy log kept" "$(api $U/projects/$LP/jobs/$LP/log)" "old log"
 M=$(api $U/projects/$LP/manifest)
 check "legacy manifest holds the source file only" "$(echo "$M" | jget '[x["path"] for x in d]')" "['index.html']"
 check "delete legacy project" "$(code -X DELETE $U/projects/$LP)" 204
+echo "== queue: a limit, first come first served, one render per project"
+newproj() { P=$(api -H "$J" -d "{\"name\":\"$1\"}" $U/projects | jget 'd["id"]'); code -X PUT --data-binary @$W/up1.tar $U/projects/$P/sync >/dev/null; touch $W/data/$P/project/slow; echo $P; }
+render() { api -H "$J" -d '{"command":["npx","hyperframes","render"]}' $U/projects/$1/jobs | jget 'd["id"]'; }
+state() { api $U/projects/$1/jobs/$2 | jget 'd["state"]'; }
+check "limit is 2 (HFR_MAX_JOBS)" "$(api $U/settings | jget 'd["effective"]')" 2
+PA=$(newproj qa); PB=$(newproj qb); PC=$(newproj qc)
+JA=$(render $PA); JB=$(render $PB); JC=$(render $PC); JA2=$(render $PA); sleep 1
+check "project A renders" "$(state $PA $JA)" running
+check "project B renders at the same time" "$(state $PB $JB)" running
+check "project C waits: the limit of 2 is reached" "$(state $PC $JC)" queued
+check "C is first in line" "$(api $U/projects/$PC/jobs/$JC | jget 'd["queue_position"]')" 1
+check "a second render of A is behind C" "$(api $U/projects/$PA/jobs/$JA2 | jget 'd["queue_position"]')" 2
+check "overview carries queue positions" "$(api $U/overview | jget 'sorted(j["queue_position"] for p in d for j in p["jobs"] if j["state"]=="queued")')" "[1, 2]"
+check "cancel A's running render" "$(code -X POST $U/projects/$PA/jobs/$JA/cancel)" 202
+sleep 1.5
+check "the next in line (C) takes the free slot" "$(state $PC $JC)" running
+check "A's second render still waits (limit reached)" "$(state $PA $JA2)" queued
+check "raising the limit starts it" "$(code -X PUT -H "$J" -d '{"max_concurrent":3}' $U/settings)" 200
+sleep 1.5
+check "A's second render now runs" "$(state $PA $JA2)" running
+check "limit 0 is refused" "$(code -X PUT -H "$J" -d '{"max_concurrent":0}' $U/settings)" 400
+check "automatic limit again" "$(api -X PUT -H "$J" -d '{"max_concurrent":null}' $U/settings | jget 'd["max_concurrent"]')" None
+check "settings survive a restart" "$(code -X PUT -H "$J" -d '{"max_concurrent":1}' $U/settings)" 200
+JQ=$(render $PB); sleep 1
+check "B's second render queues behind its own running one" "$(state $PB $JQ)" queued
+stop_agent; pkill -f 'sleep 300' 2>/dev/null; MAXJOBS=9 start_agent
+check "limit 1 remembered (a saved choice beats HFR_MAX_JOBS)" "$(api $U/settings | jget 'd["effective"]')" 1
+check "a render that was running when the agent stopped is failed" "$(state $PA $JA2)" failed
+sleep 1.5
+check "the waiting render starts after the restart" "$(state $PB $JQ)" running
+for X in "$PA" "$PB" "$PC"; do rm -f $W/data/$X/project/slow; done
+for pair in "$PB $JQ" "$PC $JC"; do set -- $pair; code -X POST $U/projects/$1/jobs/$2/cancel >/dev/null; done
+sleep 1.5; pkill -f 'sleep 300' 2>/dev/null
+for X in "$PA" "$PB" "$PC"; do code -X DELETE $U/projects/$X >/dev/null; done
 check "delete the demo project" "$(code -X DELETE $U/projects/$PID)" 204
 check "nothing left" "$(api $U/projects | jget 'len(d)')" 0
 check "status endpoint" "$(api $U/status | jget 'd["running_jobs"]')" 0

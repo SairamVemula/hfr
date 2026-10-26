@@ -73,6 +73,8 @@ pub struct OptionsDialog {
     sync_first: bool,
     /// A render that is still running and has to be stopped first: (project id, job id).
     stop_first: Option<(String, String)>,
+    /// Set when another render of this project is running: this one waits in the queue and cannot sync first.
+    queue_note: Option<String>,
 }
 
 impl OptionsDialog {
@@ -202,9 +204,15 @@ impl HfrApp {
         if let Some(f) = &folder {
             comp.extend(find_compositions(f).into_iter().filter(|c| c != "index.html").map(|c| (c.clone(), c)));
         }
-        let sync_first = folder.is_some();
+        // Another render of this project is running (and is not the one being replaced): the new one waits its turn
+        // with the files already on the VPS, because syncing is not possible while a render runs.
+        let waits = stop_first.is_none() && self.project(&pid).is_some_and(|p| p.jobs.iter().any(|j| j.state == JobState::Running));
+        let sync_first = folder.is_some() && !waits;
         let target = Target::Existing { project_id: pid, project_name: name, folder, based_on };
-        let d = self.build_options(target, &initial, comp, sync_first, stop_first, window, cx);
+        let mut d = self.build_options(target, &initial, comp, sync_first, stop_first, window, cx);
+        if waits {
+            d.queue_note = Some("A render is already running in this project, so this one joins the queue and starts when it is done. It uses the files already on the VPS (to send newer files, wait for the running render, then sync).".into());
+        }
         self.dialog = Some(Dialog::Options(Box::new(d)));
         cx.notify();
     }
@@ -280,6 +288,7 @@ impl HfrApp {
             mem_total,
             sync_first,
             stop_first,
+            queue_note: None,
         }
     }
 
@@ -354,15 +363,27 @@ impl HfrApp {
     }
 
     pub(crate) fn ask_cancel_render(&mut self, pid: String, jid: String, cx: &mut Context<Self>) {
-        self.dialog = Some(Dialog::Confirm(ConfirmDialog {
-            title: "Stop this render?".into(),
-            lines: vec![
-                "Frames rendered so far are lost.".into(),
-                "The project and its files stay on the VPS, so you can render again with other options without uploading anything.".into(),
-            ],
-            confirm_label: "Stop render".into(),
-            keep_label: "Keep rendering".into(),
-            action: ConfirmAction::CancelRender(pid, jid),
+        let queued = self.project(&pid).and_then(|p| p.jobs.iter().find(|j| j.id == jid)).is_some_and(|j| j.state == JobState::Queued);
+        self.dialog = Some(Dialog::Confirm(if queued {
+            ConfirmDialog {
+                title: "Remove this render from the queue?".into(),
+                lines: vec!["It has not started, so nothing is lost. You can add it again at any time.".into()],
+                confirm_label: "Remove from queue".into(),
+                keep_label: "Keep it".into(),
+                action: ConfirmAction::CancelRender(pid, jid),
+            }
+        } else {
+            ConfirmDialog {
+                title: "Stop this render?".into(),
+                lines: vec![
+                    "Frames rendered so far are lost.".into(),
+                    "The project and its files stay on the VPS, so you can render again with other options without uploading anything."
+                        .into(),
+                ],
+                confirm_label: "Stop render".into(),
+                keep_label: "Keep rendering".into(),
+                action: ConfirmAction::CancelRender(pid, jid),
+            }
         }));
         cx.notify();
     }
@@ -767,6 +788,9 @@ impl HfrApp {
             _ => None,
         };
         let sync_row = match &o.target {
+            Target::Existing { .. } if o.queue_note.is_some() => {
+                Some(div().text_xs().text_color(theme::muted()).child(o.queue_note.clone().unwrap_or_default()).into_any_element())
+            }
             Target::Existing { folder: Some(f), .. } => Some(
                 Checkbox::new("sync-first")
                     .label(format!("Upload changes from {} first (only files that changed are sent)", hfr_core::registry::normalize(f)))
@@ -842,6 +866,7 @@ impl HfrApp {
             });
 
         let go_label = match (&o.target, o.stop_first.is_some(), o.sync_first) {
+            (Target::Existing { .. }, false, false) if o.queue_note.is_some() => "Add to queue",
             (Target::New { .. }, _, _) => "Upload and render",
             (_, true, true) => "Stop, sync and render",
             (_, true, false) => "Stop and render",

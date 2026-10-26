@@ -41,7 +41,9 @@ A **project** is a folder of files on the VPS; it has any number of **jobs** (re
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Running: POST /projects/{p}/jobs (creates and starts)
+  [*] --> Queued: POST /projects/{p}/jobs
+  Queued --> Running: a slot is free and the project is idle
+  Queued --> Cancelled: removed from the queue
   Running --> Done: exit code 0
   Running --> Failed: non-zero / spawn error / agent restarted
   Running --> Cancelled: POST cancel
@@ -50,7 +52,7 @@ stateDiagram-v2
   Cancelled --> [*]: DELETE job
 ```
 
-"Render again" is not a state change: it creates a **new job** in the same project, so earlier renders and their files stay available. Only one job runs per project at a time; jobs in different projects can run together (there is no queue).
+"Render again" is not a state change: it creates a **new job** in the same project, so earlier renders and their files stay available. Only one job runs per project at a time. The agent runs a limited number of renders at once (by default chosen from the VPS's CPU cores and memory, adjustable); a job that cannot start yet waits as `queued`, oldest first, and starts by itself. See [agent-api.md](agent-api.md#the-render-queue).
 
 On the VPS everything lives under `$HFR_ROOT` (`/var/lib/hfr/jobs`):
 
@@ -89,7 +91,7 @@ On Windows the executable is linked with a 16 MB main-thread stack (`crates/gui/
 
 These are real, and good first contributions:
 
-- **No queue and no timeouts:** jobs in different projects started together run together, and a runaway render keeps running until you cancel it.
+- **No timeouts:** a runaway render keeps running until you cancel it. The queue is first come, first served; there are no priorities or fairness between users (there is one user).
 - **A render that was running when the agent stopped is marked failed** (its process died with the agent); finished jobs and their files are kept.
 - **Uploads are not resumable mid-file:** a cancelled or failed sync is re-run and skips files that already arrived, but a single huge file restarts. Downloads do resume.
 - **One log stream per request:** the live log only shows lines produced after you subscribe; the full log comes from `log.txt`.

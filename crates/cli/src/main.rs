@@ -130,8 +130,15 @@ enum Cmd {
         #[arg(short, long)]
         follow: bool,
     },
-    /// Stop a running render.
+    /// Stop a running render, or take a waiting one out of the queue.
     Cancel { job: String },
+    /// Renders that are running or waiting for a free slot, and the limit.
+    Queue {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show or set how many renders the VPS runs at once: a number, or `auto`.
+    Limit { value: Option<String> },
     /// VPS CPU / RAM / disk snapshot.
     Status {
         /// Machine-readable output.
@@ -365,9 +372,20 @@ async fn with_progress<T>(t: Arc<Transfer>, fut: impl Future<Output = Result<T>>
 
 async fn follow(c: &Client, pid: &str, jid: &str) -> Result<JobState> {
     let poll = async {
+        let (mut waited, mut last_pos) = (false, None);
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
             if let Ok(j) = c.job(pid, jid).await {
+                if j.state == JobState::Queued {
+                    waited = true;
+                    if j.queue_position != last_pos {
+                        last_pos = j.queue_position;
+                        println!("waiting in the queue (position {})...", j.queue_position.unwrap_or(0));
+                    }
+                } else if waited {
+                    waited = false;
+                    println!("started");
+                }
                 if j.state.is_terminal() {
                     return j.state;
                 }
@@ -552,7 +570,17 @@ async fn run(cmd: Cmd) -> Result<()> {
                 opts.apply(base).command()
             };
             let job = c.create_job(&pid, command).await?;
-            println!("started render {} in {} ({}): {}", short(&job.id), pname, short(&pid), options_summary(&job));
+            match (job.state, job.queue_position) {
+                (JobState::Queued, pos) => println!(
+                    "queued render {} in {} ({}): {} (waiting for a free slot{})",
+                    short(&job.id),
+                    pname,
+                    short(&pid),
+                    options_summary(&job),
+                    pos.map(|p| format!(", position {p}")).unwrap_or_default()
+                ),
+                _ => println!("started render {} in {} ({}): {}", short(&job.id), pname, short(&pid), options_summary(&job)),
+            }
             if !detach {
                 let st = follow(&c, &pid, &job.id).await?;
                 println!("--- render {} {st:?}", short(&job.id));
@@ -617,6 +645,54 @@ async fn run(cmd: Cmd) -> Result<()> {
             c.cancel_job(&p.project.id, &j.id).await?;
             println!("cancelling render {}", short(&j.id));
         }
+        Cmd::Queue { json } => {
+            let all = c.overview().await?;
+            let st = c.queue_status().await?;
+            let mut rows: Vec<(&ProjectView, &Job)> =
+                all.iter().flat_map(|p| p.jobs.iter().map(move |j| (p, j))).filter(|(_, j)| !j.state.is_terminal()).collect();
+            rows.sort_by_key(|(_, j)| (j.state == JobState::Queued, j.queue_position.unwrap_or(0), j.created_unix));
+            if json {
+                let jobs: Vec<&Job> = rows.iter().map(|(_, j)| *j).collect();
+                println!(
+                    "{}",
+                    serde_json::json!({ "running": st.running_jobs, "queued": st.queued_jobs, "limit": st.max_concurrent, "jobs": jobs })
+                );
+                return Ok(());
+            }
+            println!("{} running, {} waiting, limit {} at a time", st.running_jobs, st.queued_jobs, st.max_concurrent);
+            for (p, j) in rows {
+                let place = match j.state {
+                    JobState::Queued => format!("waiting #{}", j.queue_position.unwrap_or(0)),
+                    _ => "running".to_string(),
+                };
+                println!(
+                    "{}  {:<12} {:<22} {}  {}",
+                    short(&j.id),
+                    place,
+                    p.project.name,
+                    options_summary(j),
+                    ago(j.started_unix.unwrap_or(j.created_unix))
+                );
+            }
+        }
+        Cmd::Limit { value } => match value.as_deref() {
+            None => {
+                let s = c.settings().await?;
+                match s.max_concurrent {
+                    Some(n) => println!("{n} render(s) at a time (set by you; automatic would be {})", s.auto),
+                    None => println!("{} render(s) at a time (automatic, from this VPS's CPU and memory)", s.effective),
+                }
+            }
+            Some(v) => {
+                let n = if v.eq_ignore_ascii_case("auto") {
+                    None
+                } else {
+                    Some(v.parse::<u32>().context("give a number of renders, or `auto`")?)
+                };
+                let s = c.set_max_concurrent(n).await?;
+                println!("now {} render(s) at a time{}", s.effective, if n.is_none() { " (automatic)" } else { "" });
+            }
+        },
         Cmd::Status { json } => {
             let m = c.metrics().await?;
             if json {
@@ -627,6 +703,11 @@ async fn run(cmd: Cmd) -> Result<()> {
             println!("RAM  {} / {}", fmt_bytes(m.mem_used), fmt_bytes(m.mem_total));
             println!("Swap {} / {}", fmt_bytes(m.swap_used), fmt_bytes(m.swap_total));
             println!("Disk {} / {}", fmt_bytes(m.disk_used), fmt_bytes(m.disk_total));
+            if let Ok(q) = c.queue_status().await {
+                if q.max_concurrent > 0 {
+                    println!("Renders {} running, {} waiting (up to {} at a time)", q.running_jobs, q.queued_jobs, q.max_concurrent);
+                }
+            }
             // From the last check only: `status` never goes to the network for this.
             if let Some(r) = update::State::load().offer(update::CURRENT_VERSION) {
                 println!(

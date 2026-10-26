@@ -77,6 +77,7 @@ Service management: `sudo systemctl status hfr-agent`, `sudo journalctl -u hfr-a
 | `HFR_TOKEN` | required | Bearer token clients must send |
 | `HFR_ADDR` | `127.0.0.1:7878` | Listen address. Keep it on loopback |
 | `HFR_ROOT` | `./hfr-data` (`/var/lib/hfr/jobs` under systemd) | Where project folders live |
+| `HFR_MAX_JOBS` | automatic | Starting value for how many renders run at once (1-64) on a machine that has no saved choice. Change it later in the app (VPS page) or with `hfr limit` |
 | `HFR_ALLOW_ANY_COMMAND` | unset | `1` disables the command allowlist. Development only |
 
 To change one under systemd: `sudo systemctl edit hfr-agent` and add `[Service]` / `Environment=...`.

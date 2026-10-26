@@ -46,11 +46,12 @@ pub async fn get_one(State(app): State<App>, Path((p, j)): Path<(String, String)
     get_job(&app, &p, &j).await.map(Json)
 }
 
-/// Creates a job and starts it right away. A project runs one render at a time, which is also what lets
-/// every output file be attributed to the job that wrote it.
+/// Creates a job. It starts at once when a slot is free (fewer than the limit are running and nothing else is
+/// running in the same project), otherwise it waits in the queue. A project still runs one render at a time,
+/// which is what lets every output file be attributed to the job that wrote it.
 pub async fn start_job(app: &App, pid: &str, command: Vec<String>) -> Res<Job> {
     let id = uuid::Uuid::new_v4().to_string();
-    let (job, tx, cancel_rx) = {
+    {
         let mut g = app.inner.lock().await;
         let rec = g.projects.get(pid).ok_or_else(not_found)?;
         match rec.project.state {
@@ -58,30 +59,69 @@ pub async fn start_job(app: &App, pid: &str, command: Vec<String>) -> Res<Job> {
             ProjectState::Syncing => return Err(conflict("the project's files are being synced")),
             ProjectState::Ready => {}
         }
-        if g.jobs.values().any(|j| j.project_id == pid && j.state == JobState::Running) {
-            return Err(conflict("a render is already running in this project"));
-        }
-        let t = now();
         let job = Job {
             id: id.clone(),
             project_id: pid.to_string(),
-            state: JobState::Running,
-            command: command.clone(),
-            created_unix: t,
-            started_unix: Some(t),
+            state: JobState::Queued,
+            command,
+            created_unix: now(),
+            started_unix: None,
             finished_unix: None,
             files: vec![],
+            queue_position: None,
         };
-        let (tx, _) = broadcast::channel(1024);
-        let (ctx, crx) = oneshot::channel::<()>();
-        g.jobs.insert(id.clone(), job.clone());
-        g.logs.insert(id.clone(), tx.clone());
-        g.cancel_tx.insert(id.clone(), ctx);
-        (job, tx, crx)
-    };
+        g.logs.insert(id.clone(), broadcast::channel(1024).0);
+        g.jobs.insert(id.clone(), job);
+    }
     store::persist_job(app, &id).await;
-    tokio::spawn(run_job(app.clone(), pid.to_string(), id, command, tx, cancel_rx));
-    Ok(job)
+    schedule(app).await;
+    get_job(app, pid, &id).await
+}
+
+/// Starts every queued job that may start now, oldest first: while fewer than the limit are running, and never
+/// two at once in one project.
+pub async fn schedule(app: &App) {
+    let mut started = vec![];
+    {
+        let mut g = app.inner.lock().await;
+        let max = g.max_running() as usize;
+        let mut running = g.jobs.values().filter(|j| j.state == JobState::Running).count();
+        for id in g.queue_order() {
+            if running >= max {
+                break;
+            }
+            let Some(pid) = g.jobs.get(&id).map(|j| j.project_id.clone()) else { continue };
+            // Its project is gone, or its files are being replaced, or another render of it is running: not yet.
+            match g.projects.get(&pid) {
+                Some(rec) if rec.project.state == ProjectState::Ready => {}
+                _ => continue,
+            }
+            if g.jobs.values().any(|j| j.project_id == pid && j.state == JobState::Running) {
+                continue;
+            }
+            let Some(job) = g.jobs.get_mut(&id) else { continue };
+            job.state = JobState::Running;
+            job.started_unix = Some(now());
+            let command = job.command.clone();
+            let (ctx, crx) = oneshot::channel::<()>();
+            g.cancel_tx.insert(id.clone(), ctx);
+            let tx = g.logs.entry(id.clone()).or_insert_with(|| broadcast::channel(1024).0).clone();
+            running += 1;
+            started.push((pid, id, command, tx, crx));
+        }
+    }
+    for (pid, id, command, tx, crx) in started {
+        store::persist_job(app, &id).await;
+        tokio::spawn(run_job(app.clone(), pid, id, command, tx, crx));
+    }
+}
+
+/// Keeps the queue moving: whenever a render ends or the limit changes (and every few seconds as a safety net).
+pub async fn scheduler(app: App) {
+    loop {
+        schedule(&app).await;
+        let _ = tokio::time::timeout(Duration::from_secs(3), app.sched.notified()).await;
+    }
 }
 
 fn pump<R: tokio::io::AsyncRead + Unpin + Send + 'static>(r: R, tx: mpsc::UnboundedSender<String>) {
@@ -239,6 +279,7 @@ async fn finish_job(app: &App, pid: &str, id: &str, state: JobState, since: Syst
         store::persist_job(app, &other).await;
     }
     refresh_project_size(app, pid).await;
+    app.sched.notify_one();
 
     // Hashing a multi-GB video takes a while, so it happens after the job is already shown as finished.
     let (app2, pid, id) = (app.clone(), pid.to_string(), id.to_string());
@@ -256,16 +297,34 @@ async fn finish_job(app: &App, pid: &str, id: &str, state: JobState, since: Syst
     });
 }
 
-/// Stop a running render. The project and its files stay.
+/// Stop a running render, or take a waiting one out of the queue. The project and its files stay.
 pub async fn cancel(State(app): State<App>, Path((p, j)): Path<(String, String)>) -> Res<StatusCode> {
     get_job(&app, &p, &j).await?;
+    let was_queued = {
+        let mut g = app.inner.lock().await;
+        match g.jobs.get_mut(&j) {
+            Some(job) if job.state == JobState::Queued => {
+                job.state = JobState::Cancelled;
+                job.finished_unix = Some(now());
+                if let Some(tx) = g.logs.get(&j) {
+                    let _ = tx.send("== removed from the queue by the user ==".into());
+                }
+                true
+            }
+            _ => false,
+        }
+    };
+    if was_queued {
+        store::persist_job(&app, &j).await;
+        return Ok(StatusCode::ACCEPTED);
+    }
     let tx = app.inner.lock().await.cancel_tx.remove(&j);
     match tx {
         Some(tx) => {
             let _ = tx.send(());
             Ok(StatusCode::ACCEPTED)
         }
-        None => Err(conflict("job is not running")),
+        None => Err(conflict("job is not running or queued")),
     }
 }
 

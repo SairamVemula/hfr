@@ -85,6 +85,20 @@ pub struct Loaded {
 
 /// Reads every project and job under `root`, migrating old-layout folders first.
 /// A render that was running when the agent stopped is marked failed (its process died with the agent).
+/// The saved render limit (`settings.json` in the data root), if the user ever chose one.
+pub fn load_settings(root: &Path) -> Option<u32> {
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(root.join("settings.json")).ok()?).ok()?;
+    v.get("max_concurrent")?.as_u64().map(|n| n as u32)
+}
+
+pub fn save_settings(root: &Path, max_concurrent: Option<u32>) {
+    let body = serde_json::json!({ "max_concurrent": max_concurrent });
+    let tmp = root.join("settings.json.tmp");
+    if std::fs::write(&tmp, body.to_string()).is_ok() {
+        let _ = std::fs::rename(&tmp, root.join("settings.json"));
+    }
+}
+
 pub fn load_all(root: &Path) -> Loaded {
     let mut out = Loaded { projects: vec![], jobs: vec![] };
     let Ok(rd) = std::fs::read_dir(root) else { return out };
@@ -186,6 +200,7 @@ fn migrate_legacy(root: &Path, dir: &Path) -> std::io::Result<()> {
             started_unix: meta.started_unix,
             finished_unix: None,
             files: files::scan_outputs(&dir.join("project"), &HashSet::new(), since, None),
+            queue_position: None,
         };
         let jdir = dir.join("jobs").join(&legacy.id);
         std::fs::create_dir_all(&jdir)?;
@@ -220,7 +235,7 @@ mod tests {
             manifest_built: true,
         };
         save_project(&root, &rec).unwrap();
-        for (id, st) in [("j1", JobState::Done), ("j2", JobState::Running)] {
+        for (id, st) in [("j1", JobState::Done), ("j2", JobState::Running), ("j3", JobState::Queued)] {
             let job = Job {
                 id: id.into(),
                 project_id: pid.into(),
@@ -230,6 +245,7 @@ mod tests {
                 started_unix: Some(2),
                 finished_unix: None,
                 files: vec![],
+                queue_position: None,
             };
             save_job(&root, &job).unwrap();
         }
@@ -240,6 +256,13 @@ mod tests {
         loaded.jobs.sort_by(|a, b| a.id.cmp(&b.id));
         assert_eq!(loaded.jobs[0].state, JobState::Done);
         assert_eq!(loaded.jobs[1].state, JobState::Failed);
+        assert_eq!(loaded.jobs[2].state, JobState::Queued, "a waiting render is still waiting after a restart");
+        // The render limit is remembered.
+        assert_eq!(load_settings(&root), None);
+        save_settings(&root, Some(3));
+        assert_eq!(load_settings(&root), Some(3));
+        save_settings(&root, None);
+        assert_eq!(load_settings(&root), None);
         let _ = std::fs::remove_dir_all(&root);
     }
 

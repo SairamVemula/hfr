@@ -57,7 +57,7 @@ impl HfrApp {
         )
     }
 
-    pub(crate) fn vps_page(&self) -> impl IntoElement {
+    pub(crate) fn vps_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(m) = &self.metrics else {
             return div()
                 .v_flex()
@@ -95,6 +95,7 @@ impl HfrApp {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .children(self.queue_card(cx))
             .child(
                 div()
                     .h_flex()
@@ -125,7 +126,66 @@ impl HfrApp {
                     .child(div().text_sm().text_color(theme::muted()).child(format!("Per-core usage ({} cores)", m.cpu_cores.len())))
                     .child(cores),
             );
+
         div().v_flex().size_full().p_5().child(self.header("VPS", "Live server health, refreshed every 2 seconds", None)).child(body)
+    }
+
+    /// How many renders the VPS runs at once; the rest wait in the queue.
+    fn queue_card(&self, cx: &mut Context<Self>) -> Option<Div> {
+        let q = self.queue.as_ref()?;
+        let (running, waiting) = self.queue_status.as_ref().map(|s| (s.running_jobs, s.queued_jobs)).unwrap_or((0, 0));
+        let chosen = q.max_concurrent;
+        let n = q.effective;
+        let step = |id: &'static str, label: &'static str, to: u32, enabled: bool, cx: &mut Context<Self>| {
+            Button::new(id).label(label).disabled(!enabled).on_click(cx.listener(move |t, _, _, cx| t.set_render_limit(Some(to), cx)))
+        };
+        Some(
+            card()
+                .gap_3()
+                .child(
+                    div()
+                        .h_flex()
+                        .justify_between()
+                        .items_center()
+                        .child(div().font_bold().text_color(theme::fg()).child("Render queue"))
+                        .child(div().text_sm().font_family(mono()).text_color(theme::muted()).child(format!("{running} running  ·  {waiting} waiting"))),
+                )
+                .child(div().text_sm().text_color(theme::muted()).child(format!(
+                    "Up to {n} render{} at the same time. Others wait their turn, oldest first, and start by themselves. A project never runs two renders at once.",
+                    if n == 1 { " runs" } else { "s run" }
+                )))
+                .child(
+                    div()
+                        .h_flex()
+                        .items_center()
+                        .gap_2()
+                        .child(div().text_sm().text_color(theme::fg()).child("Renders at once"))
+                        .child(step("limit-minus", "-", n.saturating_sub(1).max(1), n > 1, cx))
+                        .child(div().w(px(36.)).text_center().font_bold().font_family(mono()).text_color(theme::fg()).child(n.to_string()))
+                        .child(step("limit-plus", "+", (n + 1).min(hfr_proto::MAX_CONCURRENT_LIMIT), n < hfr_proto::MAX_CONCURRENT_LIMIT, cx))
+                        .child(
+                            Button::new("limit-auto")
+                                .label(format!("Automatic ({})", q.auto))
+                                .when(chosen.is_none(), |b| b.primary())
+                                .on_click(cx.listener(|t, _, _, cx| t.set_render_limit(None, cx))),
+                        ),
+                )
+                .child(div().text_xs().text_color(theme::muted()).child(
+                    "Automatic picks the number from this VPS's CPU cores and memory. One render already uses every core, so raise it only on a big machine: parallel renders share the same CPU.",
+                )),
+        )
+    }
+
+    fn set_render_limit(&mut self, n: Option<u32>, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        if let Some(q) = self.queue.as_mut() {
+            q.max_concurrent = n;
+            q.effective = n.unwrap_or(q.auto);
+        }
+        self.run_action("Render limit", cx, async move {
+            let s = client.set_max_concurrent(n).await.map_err(|e| e.to_string())?;
+            Ok(format!("Up to {} render{} at a time", s.effective, if s.effective == 1 { "" } else { "s" }))
+        });
     }
 
     pub(crate) fn setup_form(&self, title: &str, subtitle: &str, button: &str, cx: &mut Context<Self>) -> impl IntoElement {

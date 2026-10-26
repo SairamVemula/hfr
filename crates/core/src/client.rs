@@ -3,7 +3,8 @@ use std::{process::Stdio, sync::Arc, time::Duration};
 use anyhow::{bail, Context, Result};
 use futures_util::StreamExt;
 use hfr_proto::{
-    CreateJob, CreateProject, DeletePaths, FileEntry, Job, Metrics, Project, ProjectView, SyncPlan, VersionInfo, API_VERSION, MIN_API,
+    CreateJob, CreateProject, DeletePaths, FileEntry, Job, Metrics, Project, ProjectView, SetSettings, Settings, Status, SyncPlan,
+    VersionInfo, API_VERSION, MIN_API,
 };
 use reqwest::Method;
 use tokio_util::io::ReaderStream;
@@ -184,6 +185,22 @@ impl Client {
             }
         }
         Ok(())
+    }
+
+    /// Renders running and waiting, and the limit (agent API 3; an older agent answers without the queue fields).
+    pub async fn queue_status(&self) -> Result<Status> {
+        self.json(Method::GET, "/status").await
+    }
+
+    /// The render limit: what is chosen, what is in effect, and what automatic mode would pick.
+    pub async fn settings(&self) -> Result<Settings> {
+        self.json(Method::GET, "/settings").await
+    }
+
+    /// Sets how many renders may run at once (`None` = automatic). Takes effect immediately.
+    pub async fn set_max_concurrent(&self, n: Option<u32>) -> Result<Settings> {
+        let r = self.req(Method::PUT, "/settings").json(&SetSettings { max_concurrent: n }).send().await?;
+        Ok(Self::ok(r).await?.json().await?)
     }
 
     pub async fn metrics(&self) -> Result<Metrics> {

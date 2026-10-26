@@ -100,12 +100,15 @@ impl HfrApp {
         let pid = p.project.id.clone();
         let files: usize = p.jobs.iter().map(|j| j.files.len()).sum();
         let running = p.jobs.iter().any(|j| j.state == JobState::Running);
+        let queued = p.jobs.iter().filter(|j| j.state == JobState::Queued).count();
         let status = if p.project.state == ProjectState::Syncing {
             Some(pill_icon(IconName::ArrowUp, "Uploading", theme::accent()))
         } else if p.project.state == ProjectState::Empty {
             Some(pill_icon(IconName::CircleAlert, "No files yet", theme::warning()))
         } else if running {
             Some(pill_icon(IconName::LoaderCircle, "Rendering", theme::accent()))
+        } else if queued > 0 {
+            Some(pill_icon(IconName::GalleryVerticalEnd, format!("{queued} in queue"), theme::muted()))
         } else {
             p.jobs.first().map(|j| {
                 let (label, color, icon) = state_style(j.state);
@@ -196,7 +199,8 @@ impl HfrApp {
                     .primary()
                     .icon(Icon::new(IconName::Plus))
                     .label("New render")
-                    .disabled(p.project.state != ProjectState::Ready || has_running || busy_sync)
+                    // A render may be added while another runs: it waits in the queue.
+                    .disabled(p.project.state != ProjectState::Ready || busy_sync)
                     .on_click(cx.listener(move |t, _, window, cx| t.open_render_options(p1.clone(), None, window, cx))),
             )
             .child(
@@ -264,6 +268,10 @@ impl HfrApp {
             let (label, color, icon) = state_style(j.state);
             let detail = match (j.state, took(j)) {
                 (JobState::Running, _) => "running now".to_string(),
+                (JobState::Queued, _) => match j.queue_position {
+                    Some(n) => format!("waiting, #{n} in line"),
+                    None => "waiting".to_string(),
+                },
                 (_, Some(t)) => format!("took {t}"),
                 _ => String::new(),
             };
@@ -339,7 +347,14 @@ impl HfrApp {
         let chips = option_chips(&job.command).into_iter().fold(div().h_flex().flex_wrap().gap_1(), |d, c| d.child(chip(c)));
 
         let mut actions = div().h_flex().items_center().gap_2().flex_wrap();
-        if job.state == JobState::Running {
+        if job.state == JobState::Queued {
+            let (a, b) = (pid.clone(), jid.clone());
+            actions = actions.child(
+                Button::new("cancel-queued")
+                    .label("Remove from queue")
+                    .on_click(cx.listener(move |t, _, _, cx| t.ask_cancel_render(a.clone(), b.clone(), cx))),
+            );
+        } else if job.state == JobState::Running {
             let (a, b) = (pid.clone(), jid.clone());
             let (c, d) = (pid.clone(), jid.clone());
             actions = actions
@@ -396,13 +411,37 @@ impl HfrApp {
                         )
                         .child(pill_icon(icon, label, color))
                         .child(div().text_xs().text_color(theme::muted()).child(format!(
-                            "started {}{}",
+                            "{} {}{}",
+                            if job.state == JobState::Queued { "queued" } else { "started" },
                             ago(job.created_unix),
                             took(job).map(|t| format!("  ·  took {t}")).unwrap_or_default()
                         ))),
                 )
                 .child(chips),
         )
+        .when(job.state == JobState::Queued, |d| {
+            let limit = self.queue.as_ref().map(|q| q.effective).unwrap_or(1);
+            let running = self.queue_status.as_ref().map(|q| q.running_jobs).unwrap_or(0);
+            d.child(
+                card()
+                    .gap_1()
+                    .child(
+                        div()
+                            .h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(Icon::new(IconName::GalleryVerticalEnd).size_4().text_color(theme::muted()))
+                            .child(div().font_bold().text_color(theme::fg()).child(match job.queue_position {
+                                Some(n) => format!("Waiting in the queue: number {n}"),
+                                None => "Waiting in the queue".to_string(),
+                            })),
+                    )
+                    .child(div().text_sm().text_color(theme::muted()).child(format!(
+                        "This VPS runs up to {limit} render{} at once ({running} running now), and one render per project. This one starts by itself, oldest first.",
+                        if limit == 1 { "" } else { "s" }
+                    ))),
+            )
+        })
         .when_some(progress, |d, (stage, p)| {
             d.child(
                 card()
@@ -446,6 +485,7 @@ impl HfrApp {
         }
         if job.files.is_empty() {
             let (msg, hint) = match job.state {
+                JobState::Queued => ("Waiting for a free slot", "It starts by itself; files appear here when the render finishes."),
                 JobState::Running => ("Files appear here when the render finishes", "The log tab shows what it is doing now."),
                 JobState::Done => ("No files left", "They were deleted from the VPS, or the render did not write a video."),
                 JobState::Failed => ("This render failed, so there are no files", "Check the log tab for the reason, then render again."),

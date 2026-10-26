@@ -81,6 +81,10 @@ Every delete opens a dialog that says exactly what will be removed and from wher
 
 Nothing on your computer is ever deleted by these buttons.
 
+## The render queue
+
+A VPS only runs a few renders at once (automatic by default: one per 4 CPU cores and 4 GiB of memory, at least 1). When you start another render it is accepted and **waits**: it shows a *Queued* pill with its place in line, starts by itself when a slot frees up and its project is idle, and can be removed with **Remove from queue** at no cost. You can add renders to a project that is already rendering; the dialog says it joins the queue and uses the files already on the VPS (syncing is not possible while that project renders). **VPS > Render queue** shows how many are running and waiting and lets you change the limit with **-** and **+**, or go back to **Automatic**.
+
 ## Transfers
 
 <p align="center">

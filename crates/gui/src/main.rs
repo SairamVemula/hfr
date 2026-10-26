@@ -114,6 +114,7 @@ fn chip(text: impl Into<SharedString>) -> Div {
 
 fn state_style(s: JobState) -> (&'static str, Hsla, IconName) {
     match s {
+        JobState::Queued => ("Queued", theme::muted(), IconName::GalleryVerticalEnd),
         JobState::Running => ("Rendering", theme::accent(), IconName::LoaderCircle),
         JobState::Done => ("Done", theme::success(), IconName::CircleCheck),
         JobState::Failed => ("Failed", theme::danger(), IconName::CircleX),
@@ -179,6 +180,9 @@ struct HfrApp {
     update: updates::UpdateUi,
     /// Version of the agent on the VPS, once connected.
     agent_version: Option<String>,
+    /// The render limit and the queue's size, from the agent (API 3).
+    queue: Option<hfr_proto::Settings>,
+    queue_status: Option<hfr_proto::Status>,
     agent_banner_hidden: bool,
     _update_task: Option<Task<()>>,
     host_in: Entity<InputState>,
@@ -226,6 +230,8 @@ impl HfrApp {
             dialog: None,
             update: updates::UpdateUi::new(),
             agent_version: None,
+            queue: None,
+            queue_status: None,
             agent_banner_hidden: false,
             _update_task: None,
             host_in,
@@ -274,12 +280,23 @@ impl HfrApp {
         let rt = self.rt.clone();
         Some(cx.spawn(async move |this, cx| loop {
             let c = client.clone();
-            let res = rt.spawn(async move { (c.overview().await.map_err(|e| e.to_string()), c.metrics().await.ok()) }).await;
+            let res = rt
+                .spawn(async move {
+                    (
+                        c.overview().await.map_err(|e| e.to_string()),
+                        c.metrics().await.ok(),
+                        c.settings().await.ok(),
+                        c.queue_status().await.ok(),
+                    )
+                })
+                .await;
             let alive = this
                 .update(cx, |s, cx| {
                     match res {
-                        Ok((overview, metrics)) => {
+                        Ok((overview, metrics, settings, qstatus)) => {
                             s.online = overview.is_ok();
+                            s.queue = settings;
+                            s.queue_status = qstatus;
                             match overview {
                                 Ok(list) => s.apply_overview(list, cx),
                                 Err(e) => s.status = format!("Lost connection: {e}"),
@@ -318,7 +335,7 @@ impl HfrApp {
             }
         }
         // A render that just finished: fetch the final log lines the live stream may have missed.
-        let now_running = self.selected_job_ref().map(|(_, j)| j.state == JobState::Running);
+        let now_running = self.selected_job_ref().map(|(_, j)| !j.state.is_terminal());
         if let (true, Some(false)) = (self.selected_job_running, now_running) {
             if let (Some(pid), Some(jid)) = (self.open_project.clone(), self.selected_job.clone()) {
                 self.load_log_text(pid, jid, cx);
@@ -605,7 +622,7 @@ impl Render for HfrApp {
             match self.page {
                 Page::Projects => self.projects_page(cx).into_any_element(),
                 Page::Transfers => self.transfers_page(cx).into_any_element(),
-                Page::Vps => self.vps_page().into_any_element(),
+                Page::Vps => self.vps_page(cx).into_any_element(),
                 Page::Settings => self.settings_page(cx).into_any_element(),
             }
         };
