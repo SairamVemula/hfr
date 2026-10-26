@@ -3,7 +3,27 @@ on:
   push:
     # Branches only: pushing a release tag runs the `release` workflow, and the same commit was just checked on main.
     branches: ["**"]
+    # Nothing here can break the build, so do not spend runner time on it.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "assets/**"
+      - "skills/**"
+      - ".claude/**"
+      - "LICENSE*"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "assets/**"
+      - "skills/**"
+      - ".claude/**"
+      - "LICENSE*"
+
+# A newer push to the same branch makes an older, still-running check pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # CLI, client library, agent and protocol: must build and pass tests on every desktop OS.
