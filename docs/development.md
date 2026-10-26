@@ -57,7 +57,7 @@ cargo install cargo-packager --locked
 bash scripts/stage-agents.sh
 cargo build --release -p hfr-cli -p hfr-gui
 cargo packager --release -c Packager.toml --formats nsis            # Windows installer
-cargo packager --release -c Packager.toml --formats dmg             # macOS
+cargo packager --release -c Packager.toml --formats dmg             # macOS (not part of the GitHub release workflow)
 cargo packager --release -c Packager.toml --formats appimage,deb    # Linux
 ```
 

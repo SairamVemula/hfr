@@ -9,6 +9,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [0.1.1] - 2026-10-26
 
+### Distribution
+- Releases carry installers for **Windows (x64, ARM64)** and **Linux (x64, ARM64)**; macOS is not built in releases. ARM64 builds run on GitHub's native ARM runners and are allowed to fail without blocking the x64 release. The update check only offers an installer for the computer's own CPU architecture.
+- Fixed the release workflow (the agent staging script was not executable in git).
+
 ### Changed (breaking: agent API 2)
 - **Projects, renders and files.** The model is now *project -> renders -> output files* instead of one flat job per upload. A project is a folder on the VPS; rendering it again with other options creates a new render in the same project and uploads nothing. The old `/jobs/...` endpoints are gone; see [docs/agent-api.md](docs/agent-api.md). Clients refuse an older agent and say to run `hfr setup`. An upgraded agent migrates existing job folders into projects with one render each.
 - **Only changes are uploaded.** Syncing compares SHA-256 manifests (with a local hash cache) and sends just the new or changed files; deleted files are removed on the VPS. An unchanged folder uploads 0 bytes.

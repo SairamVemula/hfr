@@ -15,11 +15,18 @@ jobs:
         include:
           - os: windows-latest
             formats: nsis
-          - os: macos-latest
-            formats: dmg
           - os: ubuntu-latest
             formats: appimage,deb
+          # ARM64 builds run natively on GitHub's ARM runners. They are new for this project, so a failure
+          # there must not block the x64 release (the release is published from whatever was built).
+          - os: windows-11-arm
+            formats: nsis
+            experimental: true
+          - os: ubuntu-24.04-arm
+            formats: appimage,deb
+            experimental: true
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
     steps:
       - uses: actions/checkout@v4
       - name: The tag must match the version in Cargo.toml and Packager.toml
@@ -39,7 +46,7 @@ jobs:
             libxcb1-dev libxcb-xkb-dev libfontconfig-dev libvulkan-dev libasound2-dev pkg-config
       - name: Build and stage the Linux agents (bundled so `hfr setup` works offline)
         shell: bash
-        run: scripts/stage-agents.sh
+        run: bash scripts/stage-agents.sh
       - name: Every bundled agent must speak the current API
         shell: bash
         run: |

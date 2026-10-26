@@ -95,21 +95,19 @@ pub fn is_newer(current: &str, latest: &str) -> bool {
     }
 }
 
-/// The installer for this platform, by file name.
+/// The installer for this platform and CPU, by file name. A file for another architecture is never offered.
 pub fn pick_installer<'a>(r: &'a Release, os: &str, arch: &str) -> Option<&'a Asset> {
     let lower = |a: &Asset| a.name.to_ascii_lowercase();
     let arm = arch == "aarch64" || arch == "arm64";
+    // Installer names say which CPU they are for; one without any marker is the x64 build.
+    let is_arm = |n: &str| n.contains("aarch64") || n.contains("arm64");
+    let fits = |a: &&Asset| is_arm(&lower(a)) == arm;
+    let ends = |a: &&Asset, suffix: &str| lower(a).ends_with(suffix);
     match os {
-        "windows" => r.assets.iter().find(|a| lower(a).ends_with("-setup.exe") || lower(a).ends_with("_setup.exe")),
-        "macos" => {
-            let want = |a: &&Asset| {
-                let n = lower(a);
-                n.ends_with(".dmg") && (n.contains("aarch64") || n.contains("arm64")) == arm
-            };
-            r.assets.iter().find(want).or_else(|| r.assets.iter().find(|a| lower(a).ends_with(".dmg")))
-        }
+        "windows" => r.assets.iter().filter(fits).find(|a| ends(a, "-setup.exe") || ends(a, "_setup.exe")),
+        "macos" => r.assets.iter().filter(fits).find(|a| ends(a, ".dmg")),
         "linux" => {
-            r.assets.iter().find(|a| lower(a).ends_with(".appimage")).or_else(|| r.assets.iter().find(|a| lower(a).ends_with(".deb")))
+            r.assets.iter().filter(fits).find(|a| ends(a, ".appimage")).or_else(|| r.assets.iter().filter(fits).find(|a| ends(a, ".deb")))
         }
         _ => None,
     }
@@ -410,6 +408,8 @@ mod tests {
         {"name":"HFR.Remote_0.2.0_aarch64.dmg","browser_download_url":"https://e/a.dmg","size":90},
         {"name":"HFR.Remote_0.2.0_x64.dmg","browser_download_url":"https://e/x.dmg","size":91},
         {"name":"hfr-remote_0.2.0_x86_64.AppImage","browser_download_url":"https://e/x.AppImage","size":92},
+        {"name":"hfr-remote_0.2.0_aarch64.AppImage","browser_download_url":"https://e/a.AppImage","size":93},
+        {"name":"hfr-gui_0.2.0_arm64-setup.exe","browser_download_url":"https://e/a.exe","size":101},
         {"name":"SHA256SUMS","browser_download_url":"https://e/SHA256SUMS","size":10}
       ]}"#;
 
@@ -418,7 +418,7 @@ mod tests {
         let r = parse_release(JSON).unwrap().unwrap();
         assert_eq!(r.version, "0.2.0");
         assert_eq!(r.notes, "- faster downloads");
-        assert_eq!(r.assets.len(), 5);
+        assert_eq!(r.assets.len(), 7);
     }
 
     #[test]
@@ -448,6 +448,20 @@ mod tests {
         assert_eq!(pick_installer(&r, "macos", "x86_64").unwrap().name, "HFR.Remote_0.2.0_x64.dmg");
         assert_eq!(pick_installer(&r, "linux", "x86_64").unwrap().name, "hfr-remote_0.2.0_x86_64.AppImage");
         assert!(pick_installer(&r, "freebsd", "x86_64").is_none());
+        assert_eq!(pick_installer(&r, "linux", "aarch64").unwrap().name, "hfr-remote_0.2.0_aarch64.AppImage");
+        assert_eq!(pick_installer(&r, "windows", "aarch64").unwrap().name, "hfr-gui_0.2.0_arm64-setup.exe");
+    }
+
+    #[test]
+    fn never_offers_an_installer_for_another_cpu() {
+        let only_x64 = Release {
+            version: "1.0.0".into(),
+            notes: String::new(),
+            page: String::new(),
+            assets: vec![Asset { name: "hfr-gui_1.0.0_x64-setup.exe".into(), url: "u".into(), size: 1 }],
+        };
+        assert!(pick_installer(&only_x64, "windows", "aarch64").is_none());
+        assert!(pick_installer(&only_x64, "windows", "x86_64").is_some());
     }
 
     #[test]
