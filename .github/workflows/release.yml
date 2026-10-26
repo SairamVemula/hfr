@@ -83,23 +83,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir assets
-          gh release download "$GITHUB_REF_NAME" --dir assets --pattern '*' --clobber
-          ls -l assets
+          mkdir release-files
+          gh release download "$GITHUB_REF_NAME" --dir release-files --pattern '*' --clobber
+          ls -l release-files
       - name: Checksums and signature
         env:
           HFR_UPDATE_KEY: ${{ secrets.HFR_UPDATE_KEY }}
         run: |
           test -n "$HFR_UPDATE_KEY" || { echo "secret HFR_UPDATE_KEY is not set"; exit 1; }
-          cd assets
+          cd release-files
           rm -f SHA256SUMS SHA256SUMS.sig
           sha256sum * > SHA256SUMS
           cd ..
-          cargo run -q -p hfr-core --example release_key -- sign assets/SHA256SUMS assets/SHA256SUMS.sig
-          cargo run -q -p hfr-core --example release_key -- verify assets/SHA256SUMS assets/SHA256SUMS.sig
+          cargo run -q -p hfr-core --example release_key -- sign release-files/SHA256SUMS release-files/SHA256SUMS.sig
+          cargo run -q -p hfr-core --example release_key -- verify release-files/SHA256SUMS release-files/SHA256SUMS.sig
       - name: Attach the signed checksums and publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" assets/SHA256SUMS assets/SHA256SUMS.sig --clobber
+          gh release upload "$GITHUB_REF_NAME" release-files/SHA256SUMS release-files/SHA256SUMS.sig --clobber
           gh release edit "$GITHUB_REF_NAME" --draft=false
