@@ -56,6 +56,21 @@ fn find_agent(explicit: Option<PathBuf>, triple: &str) -> Result<PathBuf> {
     ))
 }
 
+/// Refuses a Linux agent that does not speak this client's API (for example an installer packaged before the
+/// agents were rebuilt): installing it would "succeed" and leave the VPS on the old version.
+fn check_agent_api(path: &std::path::Path) -> Result<()> {
+    let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let marker = hfr_proto::AGENT_MARKER.as_bytes();
+    if bytes.windows(marker.len()).any(|w| w == marker) {
+        return Ok(());
+    }
+    bail!(
+        "the agent binary {} is outdated: it does not speak API {} (it was built before this version of hfr).          Rebuild it with scripts/stage-agents.sh (or cargo build -p hfr-agent --release --target <triple>) and reinstall the app, or pass --agent <path>",
+        path.display(),
+        hfr_proto::API_VERSION
+    );
+}
+
 fn ssh_common(o: &Opts, port_flag: &str) -> Vec<String> {
     // BatchMode: never block on a password prompt (the GUI has no terminal); keys come from ssh-agent.
     let mut a = vec![
@@ -93,6 +108,7 @@ pub async fn run(o: Opts, mut log: impl FnMut(String)) -> Result<Config> {
     }
     let triple = rust_target(&String::from_utf8_lossy(&arch.stdout))?;
     let agent = find_agent(o.agent.clone(), triple)?;
+    check_agent_api(&agent)?;
 
     log(format!("==> Uploading agent ({})", agent.display()));
     let up = command("scp")

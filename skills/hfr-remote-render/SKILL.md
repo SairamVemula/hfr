@@ -100,7 +100,7 @@ hfr rm project <project>                  # delete a project with all renders an
 | `ssh tunnel exited early`, `Permission denied (publickey)` | SSH key not loaded. The user must run `ssh-add <key>` (you cannot type passphrases). On Windows, run `hfr` from PowerShell: Git Bash's `ssh` cannot see the Windows ssh-agent. |
 | `agent returned 401` | Token mismatch (VPS reinstalled?). Ask the user to re-run `hfr setup`. |
 | `agent ... too old ... API 1` | Old agent on the VPS. Ask the user to run `hfr setup` when no render is running. |
-| `timed out waiting for ssh tunnel` | Port 17878 busy or network down; change `local_port` in the config or retry. |
+| `timed out waiting for ssh tunnel` | Network down or the VPS unreachable; check `ssh user@host echo ok` and retry. |
 | `agent returned 400 ... not allowed` | Option outside the allowlist. Use only the options listed above. |
 | `agent returned 409` | A render is already running in that project (cancel it or wait), or the project has no files yet. |
 | `unsafe path in archive` | Project contains symlinks/odd files. Add them to `.hfrignore`. |

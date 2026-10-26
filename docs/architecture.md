@@ -29,8 +29,8 @@ The agent and the clients only meet over the HTTP API in [agent-api.md](agent-ap
 
 ## Connection
 
-1. `Client::connect` starts `ssh -N -L 127.0.0.1:<local_port>:127.0.0.1:<remote_port> user@host` (non-interactive, key from ssh-agent) and waits for the local port.
-2. Requests go to `http://127.0.0.1:<local_port>` with `Authorization: Bearer <token>`; SSH carries them to the agent, which listens only on the VPS's loopback.
+1. `Client::connect` starts `ssh -N -L 127.0.0.1:<free local port>:127.0.0.1:<remote_port> user@host` (non-interactive, key from ssh-agent) and waits for the local port.
+2. Requests go to `http://127.0.0.1:<that port>` with `Authorization: Bearer <token>`; SSH carries them to the agent, which listens only on the VPS's loopback.
 3. Dropping the `Client` kills the `ssh` process. On Windows, child processes are created without a console window.
 
 `direct_url` in the config skips the tunnel; it exists for tests.

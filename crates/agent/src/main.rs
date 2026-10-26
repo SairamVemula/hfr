@@ -162,8 +162,24 @@ fn router(app: App) -> Router {
         .with_state(app)
 }
 
+#[used]
+static AGENT_MARKER_BYTES: [u8; hfr_proto::AGENT_MARKER.len()] = marker_bytes();
+
+const fn marker_bytes() -> [u8; hfr_proto::AGENT_MARKER.len()] {
+    let src = hfr_proto::AGENT_MARKER.as_bytes();
+    let mut out = [0u8; hfr_proto::AGENT_MARKER.len()];
+    let mut i = 0;
+    while i < out.len() {
+        out[i] = src[i];
+        i += 1;
+    }
+    out
+}
+
 #[tokio::main]
 async fn main() {
+    // Keeps the marker in the binary so `hfr setup` can check that it is bundling an agent of the right API.
+    std::hint::black_box(AGENT_MARKER_BYTES);
     let root = PathBuf::from(std::env::var("HFR_ROOT").unwrap_or_else(|_| "./hfr-data".into()));
     let token = std::env::var("HFR_TOKEN").expect("set HFR_TOKEN");
     let addr = std::env::var("HFR_ADDR").unwrap_or_else(|_| "127.0.0.1:7878".into());

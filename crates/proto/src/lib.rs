@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 /// Version of the HTTP API. Clients check it and refuse to talk to an older agent.
 pub const API_VERSION: u32 = 2;
 
+/// Text compiled into every agent binary (`hfr-agent-api=<version>`) so a client can tell which API a Linux binary
+/// speaks without running it. Keep in step with `API_VERSION` (a test checks it).
+pub const AGENT_MARKER: &str = "hfr-agent-api=2";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectState {
@@ -154,6 +158,11 @@ pub const OUTPUT_EXTS: &[&str] = &["mp4", "mov", "webm", "mkv", "gif"];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_marker_matches_api_version() {
+        assert_eq!(AGENT_MARKER, format!("hfr-agent-api={API_VERSION}"));
+    }
 
     fn f(path: &str, size: u64, sha: &str) -> FileEntry {
         FileEntry { path: path.into(), size, sha256: sha.into() }

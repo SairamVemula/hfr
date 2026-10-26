@@ -26,6 +26,11 @@ pub struct Client {
     _tunnel: Tunnel,
 }
 
+/// A TCP port on loopback that is free right now.
+fn free_port() -> Option<u16> {
+    std::net::TcpListener::bind(("127.0.0.1", 0)).ok()?.local_addr().ok().map(|a| a.port())
+}
+
 fn enc(s: &str) -> String {
     s.bytes()
         .map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
@@ -39,10 +44,13 @@ impl Client {
         if let Some(u) = &cfg.direct_url {
             return Ok(Client { http, base: u.trim_end_matches('/').into(), token: cfg.token.clone(), _tunnel: Tunnel(None) });
         }
+        // A free port chosen now, not `cfg.local_port`: a tunnel left behind by an earlier run (or another app
+        // window) may still hold that one, and talking through it can reach a stale connection.
+        let port = free_port().unwrap_or(cfg.local_port);
         let mut cmd = command("ssh");
         cmd.args(["-N", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=20", "-o", "BatchMode=yes"])
             .arg("-L")
-            .arg(format!("127.0.0.1:{}:127.0.0.1:{}", cfg.local_port, cfg.remote_port))
+            .arg(format!("127.0.0.1:{}:127.0.0.1:{}", port, cfg.remote_port))
             .arg("-p")
             .arg(cfg.ssh_port.to_string());
         if let Some(k) = &cfg.key {
@@ -50,7 +58,7 @@ impl Client {
         }
         cmd.arg(format!("{}@{}", cfg.user, cfg.host)).stdin(Stdio::null()).stdout(Stdio::null());
         let mut child = cmd.spawn().context("failed to start `ssh` (is OpenSSH installed?)")?;
-        let addr = format!("127.0.0.1:{}", cfg.local_port);
+        let addr = format!("127.0.0.1:{port}");
         for _ in 0..50 {
             if let Some(st) = child.try_wait()? {
                 bail!("ssh tunnel exited early ({st}); check host/user/key");

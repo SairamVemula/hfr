@@ -183,6 +183,12 @@ impl HfrApp {
             cx.notify();
             return;
         }
+        // Close the old SSH tunnel first: it holds the local port, so the connection made after the upgrade would
+        // otherwise talk through it to the stopped agent and keep reporting the old state.
+        self._poll = None;
+        self.log_task = None;
+        self.client = None;
+        self.online = false;
         self.setup_running = true;
         self.setup_log = vec![format!("Starting setup on {user}@{host} ...")];
         let rt = self.rt.clone();

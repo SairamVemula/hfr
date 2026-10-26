@@ -8,7 +8,7 @@
 2. The key is the one the server accepts (`ssh -v user@host` shows which keys are offered).
 3. On Windows with Git for Windows installed: run `hfr` from PowerShell. Git's `ssh` cannot see the Windows ssh-agent.
 4. The host, user and port in the config are right (Settings page, or `config.toml`).
-5. Port 17878 on your computer is free (change `local_port` in `config.toml` otherwise).
+5. Stale `ssh.exe` tunnels from earlier runs are harmless (each connection uses its own free port), but you can end them in Task Manager.
 
 ## Permission denied (publickey,password) during setup
 
