@@ -1,5 +1,9 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    # Branches only: pushing a release tag runs the `release` workflow, and the same commit was just checked on main.
+    branches: ["**"]
+  pull_request:
 
 jobs:
   # CLI, client library, agent and protocol: must build and pass tests on every desktop OS.
