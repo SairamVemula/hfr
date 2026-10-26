@@ -34,6 +34,11 @@ pub enum Phase {
     /// All bytes sent; the VPS is unpacking.
     Finishing,
     Done,
+    /// Reading local files to tell what changed.
+    Hashing,
+    Downloading,
+    /// Checking a finished download against its checksum.
+    Verifying,
 }
 
 impl Phase {
@@ -48,6 +53,9 @@ impl Phase {
             3 => Phase::Uploading,
             4 => Phase::Finishing,
             5 => Phase::Done,
+            6 => Phase::Hashing,
+            7 => Phase::Downloading,
+            8 => Phase::Verifying,
             _ => Phase::Idle,
         }
     }
@@ -114,6 +122,13 @@ impl Transfer {
         self.set_phase(p);
     }
 
+    /// Like `begin`, but for a transfer that continues from `done` bytes (a resumed download).
+    pub(crate) fn begin_at(&self, p: Phase, total: u64, done: u64) {
+        self.total.store(total, Relaxed);
+        self.done.store(done, Relaxed);
+        self.set_phase(p);
+    }
+
     pub(crate) fn add_done(&self, n: u64) {
         self.done.fetch_add(n, Relaxed);
     }
@@ -124,16 +139,24 @@ pub struct SpeedMeter {
     last: Instant,
     last_done: u64,
     bps: f64,
+    /// The first sample only sets the baseline, so a resumed transfer (which starts at N bytes) does not look fast.
+    primed: bool,
 }
 
 impl SpeedMeter {
     pub fn new() -> Self {
-        SpeedMeter { last: Instant::now(), last_done: 0, bps: 0.0 }
+        SpeedMeter { last: Instant::now(), last_done: 0, bps: 0.0, primed: false }
     }
 
     /// Call every few hundred ms with the current byte count; returns bytes/second.
     pub fn sample(&mut self, done: u64) -> f64 {
         let now = Instant::now();
+        if !self.primed {
+            self.primed = true;
+            self.last = now;
+            self.last_done = done;
+            return self.bps;
+        }
         let dt = now.duration_since(self.last).as_secs_f64();
         if dt < 0.2 {
             return self.bps;
@@ -231,5 +254,20 @@ mod tests {
         assert!(!t.is_cancelled());
         t.cancel();
         assert!(t.is_cancelled());
+    }
+}
+
+#[cfg(test)]
+mod meter_tests {
+    use super::*;
+
+    #[test]
+    fn first_sample_is_only_a_baseline() {
+        let mut m = SpeedMeter::new();
+        // A resumed download starts at 5 GB; that must not be reported as a huge speed.
+        assert_eq!(m.sample(5_000_000_000), 0.0);
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let bps = m.sample(5_000_000_000 + 2_500_000);
+        assert!(bps > 5_000_000.0 && bps < 20_000_000.0, "got {bps}");
     }
 }

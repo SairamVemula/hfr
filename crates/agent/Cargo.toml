@@ -21,3 +21,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+hfr-core = { path = "../core" }
+anyhow = "1"

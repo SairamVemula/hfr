@@ -44,7 +44,7 @@ The saved token does not match `/etc/hfr/agent.env` on the VPS (for example afte
 
 ## Render fails on the VPS
 
-`hfr logs <job-id>` shows the full output. Common causes:
+`hfr logs <job>` shows the full output. Common causes:
 
 - Chrome download blocked or incomplete: `ssh vps "sudo -u hfr -H hyperframes doctor"`.
 - Out of memory with many workers: each Chrome worker needs roughly 256 MB. Pass `-w 2`.
@@ -53,24 +53,36 @@ The saved token does not match `/etc/hfr/agent.env` on the VPS (for example afte
 
 ## "download verification failed"
 
-Size or SHA-256 differed from what the VPS reported (interrupted transfer). The partial file is deleted; run `hfr pull` again. Nothing is removed from the VPS when verification fails.
+Size or SHA-256 differed from what the VPS reported. The partial file is deleted; run `hfr pull` (or Download) again. Nothing is removed from the VPS when verification fails.
+
+## A download stopped halfway
+
+Run the same `hfr pull <job>` again, or press **Resume** on the transfer in the app: it continues from the `<file>.hfrpart` already on disk instead of starting over. **Discard** (or deleting the `.hfrpart` and `.hfrpart.json` files) throws the partial file away.
+
+## "agent API 1 is too old" / the app asks to upgrade the agent
+
+This version of `hfr` and the app talk to agent API 2 (projects, renders and files). The agent on your VPS is older. Run `hfr setup --host ... --user ...` (or **Upgrade agent** in Settings). The upgrade keeps your token, and renders from the old layout appear as projects with one render each. If a render is running, setup postpones the upgrade (see below): wait for it to finish and download its video with the *old* tools first if you want, then upgrade.
+
+## The same folder shows up as two projects (or I get a second upload)
+
+Folders are matched by their path (see [configuration.md](configuration.md#remembered-folders)). A moved or renamed folder, or `--new`, creates a new project. To reuse an existing project from another path: `hfr render <dir> --project <name or id>`. Delete the stale project when you no longer need it.
+
+## Setup says "agent update postponed"
+
+Intentional. Replacing the agent restarts it, which would stop a render that is running. Setup therefore skips the agent (and hyperframes) upgrade while a render is running, and while folders from a very old agent (without saved metadata) are still on the VPS. Finish or cancel the render, download or delete leftovers (`hfr pull`, `hfr rm`), then run `hfr setup` again. `hfr setup --force` reinstalls everything regardless.
 
 ## The app starts but shows Offline
 
 The tunnel dropped (laptop sleep, network change). Restart the app; it reconnects at startup. Your renders keep running on the VPS.
 
-## Setup says "agent update postponed"
-
-Intentional. Replacing the agent restarts it, which would stop a render that is running, and restarting an agent from before job metadata was saved would drop its existing jobs from the list. Setup therefore skips the agent (and hyperframes) upgrade while a render is running or while jobs from the previous agent version are still on the VPS. Finish or cancel the render, download or delete the old jobs (`hfr pull <id> --delete`, `hfr rm <id>`), then run `hfr setup` again. `hfr setup --force` reinstalls everything regardless.
-
 ## A cancelled render left processes behind
 
 It should not: cancel stops the whole process group (SIGTERM, then SIGKILL after 5 s). Check with `ssh vps "ps -u hfr -o pid,etime,args"`; if something survives, `sudo pkill -u hfr chrome` and please report it.
 
-## Jobs missing after restarting the agent
+## Renders missing after restarting the agent
 
-Agents from before job metadata was saved forgot their job list on restart; the folders are still in `/var/lib/hfr/jobs/` and the video can be copied out with `scp` (the folder removed with `sudo rm -rf`). Current agents save `meta.json` per job and restore the list on start; a render that was running at that moment is shown as failed.
+Current agents save every project and render to disk and restore them on start; a render that was running at that moment is shown as failed. Folders from agents older than the metadata format are not restored; the files are still in `/var/lib/hfr/jobs/` and can be copied out with `scp`.
 
 ## Disk is filling up
 
-`hfr jobs` and delete finished ones (`hfr rm <id>`). `hfr status` shows free space. Orphaned folders after an agent restart (see above) must be removed by hand.
+`hfr projects` shows each project's size; delete what you no longer need with `hfr rm project <project>`, a single render with `hfr rm job <job>` or one video with `hfr rm file <job> <file>`. `hfr status` shows free space. The app's *Free VPS space after download* setting (and `hfr pull --delete`) removes each file right after a verified download.

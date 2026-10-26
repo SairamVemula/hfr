@@ -8,7 +8,7 @@ To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 
 **Protected against:** other people on the internet or on your VPS's network reaching the agent; someone without your SSH key reading or controlling jobs; a leaked token alone being enough to run arbitrary commands; malicious archives writing outside a job's folder; the agent process damaging the VPS.
 
-**Not protected against:** someone who has both your SSH access and the token (they can render and read any job); malicious *project content* you choose to render (Hyperframes compositions are web pages and can run JavaScript in Chrome on the VPS); a compromised VPS (it holds your project files while they render); anyone with admin rights on your own computer.
+**Not protected against:** someone who has both your SSH access and the token (they can render in, read and delete any project); malicious *project content* you choose to render (Hyperframes compositions are web pages and can run JavaScript in Chrome on the VPS); a compromised VPS (it holds your project files while they render); anyone with admin rights on your own computer.
 
 Do not use a VPS that holds other secrets as a render box for untrusted projects.
 
@@ -29,7 +29,7 @@ Only `npx hyperframes render` with an allowlist of options; no shell is involved
 
 ## Uploads
 
-Archives are extracted in Rust (not with `tar`): only regular files and directories, only relative paths without `..`, no links or devices, permissions not preserved. Job ids are server-generated UUIDs and are checked against the job table before any path is built from them.
+Archives are extracted in Rust (not with `tar`): only regular files and directories, only relative paths without `..`, no links or devices, permissions not preserved. Project and job ids are server-generated UUIDs and are checked against the store before any path is built from them. Sync paths are validated like archive entries, and the file download and delete routes only accept paths recorded as outputs of that job, so a client cannot read or delete source files or anything outside the project through them.
 
 ## Service sandbox
 
@@ -55,4 +55,4 @@ It runs as root on your VPS and downloads from: Ubuntu/Debian `apt` mirrors, Nod
 - Remove the temporary sudo rule after setup: `sudo rm /etc/sudoers.d/<user>`.
 - Keep the VPS patched (`unattended-upgrades`) and its firewall closed except SSH.
 - Rotate the token if a laptop is lost ([configuration.md](configuration.md#rotating-the-token)).
-- Delete finished jobs promptly (`hfr pull --delete`) so project files do not linger on the server.
+- Delete finished renders promptly (`hfr pull --delete`) so project files do not linger on the server.

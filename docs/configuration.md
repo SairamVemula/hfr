@@ -21,6 +21,8 @@ token = ""            # empty when the token is in the OS credential store
 remote_port = 7878    # agent port on the VPS (loopback)
 local_port = 17878    # local end of the SSH tunnel
 # direct_url = "http://127.0.0.1:7878"      # skip the tunnel (testing only)
+# download_dir = 'D:\Renders'                # default: Downloads/HFR Remote
+free_after_download = true   # delete a file from the VPS after it was downloaded and verified
 ```
 
 ### Where the token lives
@@ -35,9 +37,24 @@ An old config holding a plaintext token is migrated into the credential store th
 
 To forget everything locally: delete `config.toml` and remove the `hfr` / `agent-token` credential.
 
+### Remembered folders
+
+Next to `config.toml`, in the same folder:
+
+| File | Purpose |
+| --- | --- |
+| `projects.json` | Which local folder (canonical path) is which project on the VPS, and when it was last synced. This is how `hfr render ./intro` and the app know to sync into the existing project instead of creating a second one. Delete an entry (or the file) to make the folder look new |
+| `hashcache.json` | SHA-256 of local files keyed by path, size and modified time, so syncing a large folder does not re-read every file. Safe to delete |
+
+Both are shared by the CLI and the app. A folder is identified by its path, so two folders with the same name are two projects, and a moved folder looks new.
+
+### Downloads
+
+Files are saved to `<download folder>/<project name>/<file>`; the download folder defaults to `Downloads/HFR Remote` and can be changed in the app's Settings or with `download_dir`. An unfinished download is `<file>.hfrpart` plus `<file>.hfrpart.json` next to it; run the download again to resume, or delete both files to discard it. Existing files are never overwritten.
+
 ### Project upload rules
 
-Files skipped: `node_modules/`, `.git/`, and anything matched by a `.hfrignore` in the project root (gitignore syntax). Symlinks are not uploaded.
+Files skipped: `node_modules/`, `.git/`, and anything matched by a `.hfrignore` in the project root (gitignore syntax). Symlinks are not uploaded. Only files that are new or changed since the last sync are sent; files you deleted locally are deleted from the project on the VPS at the next sync (render outputs are never removed by a sync).
 
 ## On the VPS
 
@@ -48,7 +65,7 @@ Files skipped: `node_modules/`, `.git/`, and anything matched by a `.hfrignore` 
 | `/usr/local/bin/hfr-agent` | The agent binary |
 | `/etc/systemd/system/hfr-agent.service` | Service unit (runs as user `hfr`, hardened) |
 | `/etc/hfr/agent.env` | `HFR_TOKEN=...`, mode `0640`, owner `root:hfr` |
-| `/var/lib/hfr/jobs/<id>/` | One folder per job: `project/`, `log.txt`, `meta.json` (saved job state; lets the agent restore its job list after a restart) |
+| `/var/lib/hfr/jobs/<project-id>/` | One folder per project: `project.json` (name and manifest of synced files), `project/` (the files and the renders' outputs) and `jobs/<job-id>/` with `job.json` and `log.txt` for each render. The saved state lets the agent restore everything after a restart |
 | `/var/lib/hfr/.cache/hyperframes/` | Chrome download used for rendering |
 
 Service management: `sudo systemctl status hfr-agent`, `sudo journalctl -u hfr-agent -f`, `sudo systemctl restart hfr-agent`.
@@ -59,7 +76,7 @@ Service management: `sudo systemctl status hfr-agent`, `sudo journalctl -u hfr-a
 | --- | --- | --- |
 | `HFR_TOKEN` | required | Bearer token clients must send |
 | `HFR_ADDR` | `127.0.0.1:7878` | Listen address. Keep it on loopback |
-| `HFR_ROOT` | `./hfr-data` (`/var/lib/hfr/jobs` under systemd) | Where job folders live |
+| `HFR_ROOT` | `./hfr-data` (`/var/lib/hfr/jobs` under systemd) | Where project folders live |
 | `HFR_ALLOW_ANY_COMMAND` | unset | `1` disables the command allowlist. Development only |
 
 To change one under systemd: `sudo systemctl edit hfr-agent` and add `[Service]` / `Environment=...`.

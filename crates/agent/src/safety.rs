@@ -7,11 +7,13 @@ use sha2::{Digest, Sha256};
 pub use hfr_proto::validate_command;
 
 /// Extracts a tar into `dest`, refusing links, devices and any path that is absolute or climbs out.
-pub fn extract_safe(tar_path: &Path, dest: &Path) -> Result<(), String> {
+/// Returns the project-relative paths (with `/`) of the regular files it wrote.
+pub fn extract_safe(tar_path: &Path, dest: &Path) -> Result<Vec<String>, String> {
     let f = std::fs::File::open(tar_path).map_err(|e| e.to_string())?;
     let mut ar = tar::Archive::new(std::io::BufReader::new(f));
     ar.set_preserve_permissions(false);
     ar.set_unpack_xattrs(false);
+    let mut written = Vec::new();
     for entry in ar.entries().map_err(|e| e.to_string())? {
         let mut e = entry.map_err(|e| e.to_string())?;
         let t = e.header().entry_type();
@@ -25,8 +27,18 @@ pub fn extract_safe(tar_path: &Path, dest: &Path) -> Result<(), String> {
         if !e.unpack_in(dest).map_err(|e| e.to_string())? {
             return Err(format!("unsafe path in archive: {}", path.display()));
         }
+        if t != tar::EntryType::Directory {
+            let rel: Vec<String> = path
+                .components()
+                .filter_map(|c| match c {
+                    Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
+                    _ => None,
+                })
+                .collect();
+            written.push(rel.join("/"));
+        }
     }
-    Ok(())
+    Ok(written)
 }
 
 /// Constant-time token check: compares fixed-length digests so neither length nor content leaks via timing.
@@ -64,7 +76,7 @@ mod tests {
             h.set_mode(0o644);
             b.append_data(&mut h, "dir/a.txt", &b"hi"[..]).unwrap();
         });
-        extract_safe(&good, &base.join("out")).unwrap();
+        assert_eq!(extract_safe(&good, &base.join("out")).unwrap(), ["dir/a.txt"]);
         assert!(base.join("out/dir/a.txt").is_file());
 
         let bad = base.join("bad.tar");

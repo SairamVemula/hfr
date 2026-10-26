@@ -65,23 +65,25 @@ What it does, step by step: detects the VPS CPU type, uploads the matching stati
 ## 5. Render something
 
 ```bash
-hfr render ./my-project          # packs, uploads, starts, follows logs
+hfr render ./my-project          # creates the project, uploads, starts, follows logs
+hfr render ./my-project --quality delivery --fps 60   # again with other options: uploads only what changed
 ```
 
 The project folder is the one with `index.html` / `hyperframes.json`. `node_modules` and `.git` are skipped automatically; add a `.hfrignore` file (gitignore syntax) to skip more, such as old `renders/`.
 
-In the app, click **New render** and pick the folder.
+In the app, click **New render**, pick the folder and choose the options. The folder becomes a *project* on the VPS; it keeps all its renders, and the next render of the same folder uploads only what you changed.
 
 ## 6. Get the video and free the space
 
 ```bash
-hfr jobs                          # find the job id and state
-hfr pull <job-id> --delete        # download, verify SHA-256, then delete on the VPS
+hfr projects                      # your projects and their renders
+hfr files <job>                   # the videos a render wrote
+hfr pull <job> --delete           # download them (resumable), verify SHA-256, then delete on the VPS
 ```
 
-In the app, select the job, keep **Free VPS space after download** ticked and press **Download video**. Files go to your Downloads folder (CLI: current folder, or `-o <dir>`).
+In the app, open the project, select the render and press **Download** next to a file (or **Download all**). The Transfers bar shows percentage, speed and time left, with Pause and Resume. Files go to `Downloads/HFR Remote/<project>` (CLI: current folder, or `-o <dir>`); an existing file is never overwritten. Keep **Delete a file from the VPS after it was downloaded and verified** ticked in Settings to free the space in the same step.
 
-Nothing is deleted unless the download verified. Deleting without downloading needs an explicit second click ("Really delete?") in the app, or `hfr rm <job-id>`.
+Nothing is deleted unless the download verified. Deleting without downloading always asks first: **Delete** next to a file, a render or a project in the app (the dialog says what goes), or `hfr rm file|job|project`.
 
 ## Where to go next
 

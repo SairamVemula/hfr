@@ -2916,8 +2916,10 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 name = "hfr-agent"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "futures-util",
+ "hfr-core",
  "hfr-proto",
  "libc",
  "serde",
@@ -2968,6 +2970,7 @@ dependencies = [
 name = "hfr-gui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "dirs",
  "gpui-kit",
  "hfr-core",

@@ -38,18 +38,24 @@ ver_ge() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]; }
 BUSY=0
 if [ -s /etc/hfr/agent.env ] || $SUDO test -s /etc/hfr/agent.env 2>/dev/null; then
   TOKEN_NOW=$($SUDO sed -n 's/^HFR_TOKEN=//p' /etc/hfr/agent.env 2>/dev/null || true)
-  if [ -n "$TOKEN_NOW" ] && have_cmd curl \
-    && curl -fsS -m 5 -H "Authorization: Bearer $TOKEN_NOW" http://127.0.0.1:7878/jobs 2>/dev/null | grep -q '"state":"running"'; then
-    BUSY=1
+  if [ -n "$TOKEN_NOW" ] && have_cmd curl; then
+    # Agent API 2 answers /status; an older agent only knows /jobs.
+    STATUS=$(curl -fsS -m 5 -H "Authorization: Bearer $TOKEN_NOW" http://127.0.0.1:7878/status 2>/dev/null || true)
+    if [ -n "$STATUS" ]; then
+      echo "$STATUS" | grep -Eq '"running_jobs": *[1-9]' && BUSY=1
+    else
+      curl -fsS -m 5 -H "Authorization: Bearer $TOKEN_NOW" http://127.0.0.1:7878/jobs 2>/dev/null | grep -q '"state":"running"' && BUSY=1
+    fi
   fi
 fi
 [ "$BUSY" = 1 ] && echo "==> A render is running on this VPS: upgrades that could interrupt it will be skipped"
 
-# Jobs created by an older agent have no saved metadata: restarting that agent would drop them from the job list
-# (their files would stay on disk). Hold the agent update until they are downloaded or deleted.
+# Folders with neither job metadata (old agent) nor project metadata (agent API 2) would be dropped from the list
+# when the agent restarts (their files would stay on disk). Hold the agent update until they are downloaded or
+# deleted. Old-layout folders that do have meta.json are migrated into projects by the new agent.
 LEGACY=0
 if $SUDO test -d /var/lib/hfr/jobs; then
-  LEGACY=$($SUDO find /var/lib/hfr/jobs -mindepth 1 -maxdepth 1 -type d ! -exec test -e '{}/meta.json' \; -print 2>/dev/null | wc -l)
+  LEGACY=$($SUDO find /var/lib/hfr/jobs -mindepth 1 -maxdepth 1 -type d ! -exec test -e '{}/meta.json' \; ! -exec test -e '{}/project.json' \; -print 2>/dev/null | wc -l)
 fi
 
 # --- system packages -------------------------------------------------------------------------------------

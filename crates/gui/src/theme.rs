@@ -28,6 +28,11 @@ pub fn muted() -> Hsla {
 pub fn accent() -> Hsla {
     hex(0x7C5CFF)
 }
+/// Violet for TEXT on dark panels: `accent()` is about 3:1 there, this one is about 5.4:1 (WCAG AA needs 4.5:1).
+/// Keep `accent()` for fills, borders and progress bars.
+pub fn accent_text() -> Hsla {
+    hex(0xA992FF)
+}
 pub fn success() -> Hsla {
     hex(0x34D399)
 }

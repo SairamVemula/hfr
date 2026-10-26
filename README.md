@@ -1,11 +1,11 @@
 # HFR Remote
 
 **Render big [Hyperframes](https://github.com/heygen-com/hyperframes) projects on your own VPS instead of your PC.**
-Push the project, watch the render and the server's health live, download the verified video, and free the space - from a desktop app or the `hfr` command line.
+Upload a project once, render it as many times as you like with different options, watch the server's health live, download each video (verified, resumable) and free the space - from a desktop app or the `hfr` command line.
 
 <p align="center">
-  <img src="docs/images/vps.png" alt="HFR Remote VPS dashboard" width="49%">
-  <img src="docs/images/jobs.png" alt="HFR Remote job view with live logs" width="49%">
+  <img src="docs/images/project.png" alt="A project with its renders and output files" width="49%">
+  <img src="docs/images/download.png" alt="Download with percentage, speed and time left" width="49%">
 </p>
 
 ## Why
@@ -32,10 +32,11 @@ flowchart LR
 ```
 
 1. **`hfr setup`** (or the app's first-run screen) installs a small agent plus Node, ffmpeg, Chrome and `hyperframes` on the VPS over SSH.
-2. **Render:** pick the folder, choose options (frame rate, quality, format, workers) in a dialog, and watch the upload with speed and time left (cancellable). The agent then renders it.
-3. **Watch:** logs stream live, with a progress bar and CPU / memory / disk charts of the VPS.
-4. **Change your mind:** cancel a render, or re-render the same project with other options, without uploading it again.
-5. **Download and clean up:** the video comes back with a SHA-256 check, and the job folder can be deleted in the same step to free your SSD.
+2. **Projects:** pick a folder; it becomes a *project* on the VPS. Syncing again uploads **only the files that changed**, and a folder you used before is recognised (two folders with the same name are still two projects).
+3. **Renders:** a project has any number of renders, each with its own options (frame rate, quality, format, workers). Watch the upload with speed and time left (cancellable), then live logs, a progress bar and CPU / memory / disk charts of the VPS.
+4. **Change your mind:** cancel a render, or render the same project again with other options, without uploading it again. Earlier renders and their files stay.
+5. **Files:** every render lists its output videos. Download or delete each one on its own, or delete a whole render or project, with confirmations that say exactly what goes.
+6. **Downloads** show percentage, speed and time left, can be paused and resumed, are checked against a SHA-256, never overwrite an existing file, and can free the VPS space in the same step.
 
 ## Quick start
 
@@ -48,10 +49,14 @@ ssh-add ~/.ssh/id_ed25519
 # 2. One-time install on the VPS
 hfr setup --host 203.0.113.10 --user root
 
-# 3. Render a project on the VPS and follow the logs
+# 3. Render a project on the VPS and follow the logs (first time uploads everything)
 hfr render ./my-project
 
-# 4. Download the video and free the space on the VPS
+# 4. Try other options: uploads only what you changed (nothing, if nothing changed)
+hfr render ./my-project --quality delivery --fps 60
+
+# 5. See what is there, download a render's videos and free the space on the VPS
+hfr projects
 hfr pull <job-id> --delete
 ```
 
@@ -64,7 +69,7 @@ Prefer a window? Start **HFR Remote** and follow the first-run screen. Full walk
 | [Getting started](docs/getting-started.md) | Install, SSH key setup per OS, first render |
 | [CLI reference](docs/cli.md) | Every `hfr` command and option |
 | [Desktop app](docs/gui.md) | Screens and what they do |
-| [Architecture](docs/architecture.md) | Crates, data flow, job lifecycle |
+| [Architecture](docs/architecture.md) | Crates, projects and renders, sync, downloads |
 | [Agent API](docs/agent-api.md) | HTTP endpoints the VPS agent exposes |
 | [Configuration](docs/configuration.md) | Config file, environment variables, paths on both machines |
 | [Security](docs/security.md) | Threat model, controls, known limits |
@@ -77,9 +82,9 @@ Using an AI agent? Point it at [AGENTS.md](AGENTS.md), [llms.txt](llms.txt) and 
 
 | Crate | Binary | Role |
 | --- | --- | --- |
-| `crates/proto` | - | Shared data types (jobs, metrics) |
-| `crates/agent` | `hfr-agent` | Service on the VPS: job runner, logs, metrics, output |
-| `crates/core` | - | Client library: SSH tunnel, HTTP client, upload/download, VPS setup |
+| `crates/proto` | - | Shared data types (projects, jobs, files, metrics), sync plan, command allowlist |
+| `crates/agent` | `hfr-agent` | Service on the VPS: projects, job runner, logs, files, metrics |
+| `crates/core` | - | Client library: SSH tunnel, HTTP client, delta sync, resumable downloads, VPS setup |
 | `crates/cli` | `hfr` | Command line |
 | `crates/gui` | `hfr-gui` | Desktop app ([GPUI](https://www.gpui.rs) + gpui-kit) |
 

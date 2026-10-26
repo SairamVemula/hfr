@@ -11,7 +11,9 @@
 
 ```bash
 cargo build                         # everything (debug)
+cargo test --workspace --exclude hfr-gui   # unit tests and the agent integration test (crates/agent/tests/e2e.rs)
 cargo test -p hfr-agent             # agent safety tests (command allowlist, tar extraction, token check)
+bash scripts/e2e-agent.sh           # Linux/WSL: ~57 API checks against the musl agent with a fake npx
 cargo build -p hfr-cli              # just the CLI -> target/debug/hfr
 cargo build -p hfr-gui              # just the app -> target/debug/hfr-gui
 ```
@@ -72,25 +74,38 @@ Tag and push: `git tag v0.1.0 && git push --tags`. `.github/workflows/release.ym
 ## Code map
 
 ```
-crates/proto/src/lib.rs        wire types, output extensions
+crates/proto/src/lib.rs        wire types (Project, Job, OutputFile), sync plan, API_VERSION
 crates/proto/src/command.rs    command allowlist (shared: agent enforces, clients are tested against it)
-crates/agent/src/main.rs       HTTP routes, job runner, metrics
-crates/agent/src/safety.rs     tar extraction, token check (+ tests)
-crates/core/src/lib.rs         Config, credential store, Tunnel, Client, pack + tracked upload
-crates/core/src/render.rs      RenderOptions -> command (shared by CLI and app)
-crates/core/src/transfer.rs    upload progress, cancel, speed/ETA helpers
+crates/agent/src/main.rs       routes, auth, overview
+crates/agent/src/store.rs      projects and jobs on disk, persistence, migration of the old layout
+crates/agent/src/projects.rs   create/delete, manifest, sync plan, sync upload
+crates/agent/src/jobs.rs       job runner, cancel, logs
+crates/agent/src/files.rs      output files: list, ranged download, delete
+crates/agent/src/safety.rs     tar extraction, path and token checks (+ tests)
+crates/agent/tests/e2e.rs      integration test: real agent driven through hfr-core
+crates/core/src/config.rs      Config, credential store
+crates/core/src/client.rs      Tunnel, Client (every API call)
+crates/core/src/sync.rs        scan, hash cache, delta upload
+crates/core/src/registry.rs    local folder -> project
+crates/core/src/download.rs    resumable verified downloads
+crates/core/src/render.rs      RenderOptions <-> command (shared by CLI and app)
+crates/core/src/transfer.rs    progress, cancel, speed/ETA helpers
 crates/core/src/setup.rs       VPS installation (uses install.sh)
 crates/core/src/install.sh     script run on the VPS (idempotent, bash, Debian/Ubuntu)
 crates/cli/src/main.rs         clap commands
-crates/gui/src/main.rs         app state, actions, main views
-crates/gui/src/render_flow.rs  new-render flow: options dialog, upload panel
+crates/gui/src/main.rs         app shell, state, polling
+crates/gui/src/projects_view.rs project list and project page
+crates/gui/src/dialogs.rs      render options, confirmations, new project
+crates/gui/src/transfers.rs    uploads, downloads, transfer bar and page
+crates/gui/src/pages.rs        VPS and settings pages
 crates/gui/src/theme.rs        palette and gpui-kit theme overrides
+scripts/e2e-agent.sh           API checks against a Linux agent binary (fake npx)
 ```
 
 ## Conventions
 
 - Keep the agent API additive; clients and agents of different versions should keep working where possible.
-- New agent endpoints must go behind the auth middleware and validate any id against the job table before building paths.
+- New agent endpoints must go behind the auth middleware and validate any project or job id against the store, and any `?path=` against the recorded files or `safety.rs` rules, before building paths. Bump `API_VERSION` for breaking changes.
 - Anything that executes input needs an allowlist and a test (`crates/proto/src/command.rs` for commands, `crates/agent/src/safety.rs` for archives and tokens).
 - No network calls other than to the user's own VPS (and the installer's package downloads).
 - Match the surrounding style; run `cargo fmt` and `cargo clippy` before sending a PR.

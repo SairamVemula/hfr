@@ -1,6 +1,6 @@
 # HFR Remote
 
-> HFR Remote renders Hyperframes (HTML-to-video) projects on your own Linux VPS instead of your PC. A Rust CLI (`hfr`) and desktop app (`hfr-gui`) push the project through an SSH tunnel to a small agent (`hfr-agent`), stream logs and server metrics, download the SHA-256-verified video, and delete the job to free disk space. Licensed MIT OR Apache-2.0.
+> HFR Remote renders Hyperframes (HTML-to-video) projects on your own Linux VPS instead of your PC. A Rust CLI (`hfr`) and desktop app (`hfr-gui`) sync projects (changed files only) through an SSH tunnel to a small agent (`hfr-agent`), render them with any options, stream logs and server metrics, download each output file (SHA-256-verified, resumable) and delete files, renders or projects to free disk space. Licensed MIT OR Apache-2.0.
 
 ## Use it
 - [README](https://github.com/SairamVemula/hfr/blob/main/README.md): overview, quick start
@@ -11,7 +11,7 @@
 - [Agent skill: render with HFR](https://github.com/SairamVemula/hfr/blob/main/skills/hfr-remote-render/SKILL.md): instructions for AI agents operating the tool
 
 ## Understand it
-- [Architecture](https://github.com/SairamVemula/hfr/blob/main/docs/architecture.md): crates, connection, job lifecycle, known limitations
+- [Architecture](https://github.com/SairamVemula/hfr/blob/main/docs/architecture.md): crates, projects and renders, sync, downloads, known limitations
 - [Agent API](https://github.com/SairamVemula/hfr/blob/main/docs/agent-api.md): HTTP endpoints, types, errors
 - [Configuration](https://github.com/SairamVemula/hfr/blob/main/docs/configuration.md): config file, env vars, paths
 - [Security](https://github.com/SairamVemula/hfr/blob/main/docs/security.md): threat model, controls, limits

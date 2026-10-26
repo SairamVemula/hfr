@@ -1,5 +1,7 @@
 // Embeds the app icon and version info into the Windows executable.
 fn main() {
+    #[cfg(all(windows, target_env = "msvc"))]
+    println!("cargo:rustc-link-arg-bins=/STACK:16777216");
     #[cfg(windows)]
     {
         let mut res = winresource::WindowsResource::new();

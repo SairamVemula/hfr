@@ -12,6 +12,7 @@ gpui-kit = "0.8"
 tokio.workspace = true
 dirs = "5"
 serde_json.workspace = true
+anyhow = "1"
 
 [build-dependencies]
 winresource = "0.1"

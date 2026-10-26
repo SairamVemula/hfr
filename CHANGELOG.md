@@ -4,10 +4,28 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
-### Fixed
-- `hfr setup` could generate a new token when run by a non-root SSH user (it could not see `/etc/hfr`), leaving a still-running agent and the client with different tokens. File tests in the installer now run as root, the existing token is never regenerated, and the token handed to the client is read from the running agent.
+### Changed (breaking: agent API 2)
+- **Projects, renders and files.** The model is now *project -> renders -> output files* instead of one flat job per upload. A project is a folder on the VPS; rendering it again with other options creates a new render in the same project and uploads nothing. The old `/jobs/...` endpoints are gone; see [docs/agent-api.md](docs/agent-api.md). Clients refuse an older agent and say to run `hfr setup`. An upgraded agent migrates existing job folders into projects with one render each.
+- **Only changes are uploaded.** Syncing compares SHA-256 manifests (with a local hash cache) and sends just the new or changed files; deleted files are removed on the VPS. An unchanged folder uploads 0 bytes.
+- **Folders are remembered by path** (`projects.json` next to the config). Two folders with the same name are two projects, shown with their paths. Picking a known folder offers Sync / Render / Open / Create a separate project.
+- One render runs per project at a time (`409` otherwise); renders in different projects can run together.
+- CLI: `hfr push` creates or syncs a project, `hfr render` syncs then renders (`--project`, `--new`, `--no-sync`, `--like`), `hfr rm project|job|file`, `hfr pull <job> [file]`. New `hfr projects` and `hfr files`. `hfr rerun` and `hfr start` are replaced by `hfr render --like <job>`.
+- App rebuilt around projects: Projects list, a project page with its renders, Files and Log tabs, per-file Download and Delete, and a Transfers page.
 
 ### Added
+- **Per-file download and delete**, per-render and per-project delete, each behind a confirmation that names what is removed. Output files are recorded per render (a modification-time window inside the render, which is why only one render runs per project).
+- **Download experience:** percentage, bytes, speed and time left, pause and resume, resume after a lost connection or restart (`Range` requests, `.hfrpart` files), SHA-256 verification before the file appears, and no overwriting (`name (1).mp4`). A compact transfer bar shows on every page; the CLI prints the same progress line.
+- Download folder and *free the VPS copy after a verified download* are saved in the config (`download_dir`, `free_after_download`).
+- `scripts/e2e-agent.sh` (57 checks of the HTTP API against a real agent binary with a fake `npx`) and a CI job that runs it; a Rust integration test drives the agent through `hfr-core`.
+- `GET /status`, used by the installer to detect a running render.
+- `theme::accent_text()`: a lighter violet for text on dark panels (contrast 4.5:1).
+
+### Fixed
+- `hfr setup` could generate a new token when run by a non-root SSH user (it could not see `/etc/hfr`), leaving a still-running agent and the client with different tokens. File tests in the installer now run as root, the existing token is never regenerated, and the token handed to the client is read from the running agent.
+- A render started from the app's upload flow did not stream its log until the next refresh.
+- On Windows the app overflowed the 1 MB main-thread stack in debug builds when a transfer was shown; the executable now reserves 16 MB.
+
+### Added earlier in 0.1 (parts superseded by the project model above)
 - **Cancel a render and re-render with different options.** Agent: `POST /jobs/{id}/cancel` (stops the whole process tree) and `POST /jobs/{id}/rerun` (reuses the uploaded project, no re-upload; cancels first when running), new `cancelled` job state. App: **Cancel render** (with a confirm step), **Change options and restart** / **Re-render with other options** using the same Render options dialog, pre-filled. CLI: `hfr cancel`, `hfr rerun`.
 - **Idempotent installer:** `hfr setup` checks what is already installed (system packages, Node 22, hyperframes, Chrome, agent) and only installs or upgrades what is missing or outdated, with a per-step report; `--force` reinstalls everything. It never interrupts a running render and holds the agent update while jobs from an older agent are on the VPS.
 - **Job state survives agent restarts** (`meta.json` per job); a render that was running at that moment shows as failed.
