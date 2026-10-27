@@ -4,6 +4,9 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+- **Preview a render on the VPS.** Each video file has a **Play** button (and `hfr play <job> [file]`) that opens a player window and streams the file from the VPS: no download first, seeking works at once. Controls: play/pause, seek bar with buffering, volume, speed 0.25x-2x, loop, fullscreen, and keyboard shortcuts (Space/K, left/right 5 s, Shift 1 s, J/L 10 s, `,` `.` single frames, 0-9 jumps, Home/End, M, F, ?, Esc). GIFs open as an animated picture; files the system web view cannot decode (MOV/ProRes, some HEVC) say so. A loopback proxy keeps the token out of the page; each session reads only its own file. The window is a new small program, `hfr-player` (system WebView; falls back to the default browser when no WebView is available), shipped with the installers.
+
 ## [0.1.3] - 2026-10-26
 
 ### Added

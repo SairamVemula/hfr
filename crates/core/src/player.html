@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0B0D14; --panel:#12141D; --line:#262B40; --fg:#E8EAF3; --muted:#8B93A7; --accent:#7C5CFF; --accent-text:#A992FF; --danger:#F87171; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; overflow:hidden; user-select:none; }
+  #app { display:flex; flex-direction:column; height:100%; }
+  #stage { position:relative; flex:1; min-height:0; background:#000; display:flex; align-items:center; justify-content:center; }
+  video, #img { max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain; background:#000; outline:none; }
+  #img[hidden], video[hidden] { display:none; }
+  #big { position:absolute; width:84px; height:84px; border-radius:50%; border:0; background:rgba(124,92,255,.92); color:#fff; font-size:34px; cursor:pointer; display:none; align-items:center; justify-content:center; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  #big.show { display:flex; }
+  #toast { position:absolute; top:16px; left:50%; transform:translateX(-50%); background:rgba(18,20,29,.92); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-weight:600; opacity:0; transition:opacity .15s; pointer-events:none; }
+  #toast.show { opacity:1; }
+  #spin { position:absolute; width:46px; height:46px; border:4px solid rgba(255,255,255,.18); border-top-color:var(--accent); border-radius:50%; animation:spin 0.9s linear infinite; display:none; }
+  #spin.show { display:block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #err { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:32px; background:rgba(11,13,20,.96); }
+  #err.show { display:flex; }
+  #err h2 { margin:0; font-size:18px; }
+  #err p { margin:0; color:var(--muted); max-width:520px; }
+  #err button { margin-top:6px; }
+  #help { position:absolute; right:16px; bottom:16px; background:rgba(18,20,29,.96); border:1px solid var(--line); border-radius:12px; padding:14px 18px; display:none; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  #help.show { display:block; }
+  #help h3 { margin:0 0 8px; font-size:13px; letter-spacing:.04em; color:var(--muted); text-transform:uppercase; }
+  #help table { border-collapse:collapse; }
+  #help td { padding:2px 14px 2px 0; font-size:13px; }
+  kbd { background:#1c2030; border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:0 6px; font:12px "Cascadia Mono", Consolas, monospace; }
+  #bar { background:var(--panel); border-top:1px solid var(--line); padding:8px 14px 10px; transition:opacity .2s; }
+  body.idle.playing #bar { opacity:0; }
+  body.idle.playing { cursor:none; }
+  #seek { position:relative; height:18px; cursor:pointer; touch-action:none; }
+  #track { position:absolute; left:0; right:0; top:7px; height:4px; border-radius:2px; background:#2a2f45; overflow:hidden; }
+  #buf span { position:absolute; top:0; bottom:0; background:#4b5272; }
+  #pos { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--accent); }
+  #knob { position:absolute; top:3px; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:#fff; box-shadow:0 0 0 3px rgba(124,92,255,.35); left:0; }
+  #tip { position:absolute; bottom:22px; transform:translateX(-50%); background:#000; border:1px solid var(--line); border-radius:6px; padding:1px 7px; font:12px "Cascadia Mono", Consolas, monospace; display:none; white-space:nowrap; }
+  #row { display:flex; align-items:center; gap:6px; margin-top:4px; }
+  button.ic { background:transparent; border:0; color:var(--fg); width:34px; height:30px; border-radius:7px; font-size:15px; cursor:pointer; }
+  button.ic:hover { background:#1e2336; }
+  button.ic.on { color:var(--accent-text); }
+  button.txt { background:#1e2336; border:1px solid var(--line); color:var(--fg); border-radius:7px; padding:4px 12px; cursor:pointer; font:inherit; }
+  button.txt:hover { background:#272d46; }
+  #time { font:13px "Cascadia Mono", Consolas, monospace; color:var(--fg); margin:0 8px; white-space:nowrap; }
+  #name { flex:1; min-width:0; text-align:center; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #vol { width:84px; accent-color:var(--accent); }
+  #rate { min-width:52px; font-variant-numeric:tabular-nums; }
+  #meta { color:var(--muted); font-size:12px; margin-right:6px; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <video id="v" preload="auto" playsinline __VIDEO_HIDDEN__></video>
+    <img id="img" alt="" __IMG_HIDDEN__>
+    <div id="spin"></div>
+    <button id="big" aria-label="Play">&#9654;</button>
+    <div id="toast"></div>
+    <div id="err" role="alert">
+      <h2 id="errh">This file can't be previewed</h2>
+      <p id="errp"></p>
+      <button class="txt" id="retry">Try again</button>
+    </div>
+    <div id="help">
+      <h3>Keyboard</h3>
+      <table>
+        <tr><td><kbd>Space</kbd> <kbd>K</kbd></td><td>Play / pause</td></tr>
+        <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td>Back / forward 5 s</td></tr>
+        <tr><td><kbd>Shift</kbd>+<kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td>Back / forward 1 s</td></tr>
+        <tr><td><kbd>J</kbd> <kbd>L</kbd></td><td>Back / forward 10 s</td></tr>
+        <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td>Previous / next frame</td></tr>
+        <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td>Volume</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Mute</td></tr>
+        <tr><td><kbd>&lt;</kbd> <kbd>&gt;</kbd></td><td>Slower / faster</td></tr>
+        <tr><td><kbd>0</kbd>-<kbd>9</kbd></td><td>Jump to 0% - 90%</td></tr>
+        <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>Start / end</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Loop on / off</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Fullscreen</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Leave fullscreen, then close</td></tr>
+      </table>
+    </div>
+  </div>
+  <div id="bar">
+    <div id="seek"><div id="track"><div id="buf"></div><div id="pos"></div></div><div id="knob"></div><div id="tip"></div></div>
+    <div id="row">
+      <button class="ic" id="play" title="Play / pause (Space)">&#9654;</button>
+      <button class="ic" id="back" title="Back 5 s (Left)">&#8630;</button>
+      <button class="ic" id="fwd" title="Forward 5 s (Right)">&#8631;</button>
+      <span id="time">0:00.00 / 0:00.00</span>
+      <button class="ic" id="mute" title="Mute (M)">&#128266;</button>
+      <input id="vol" type="range" min="0" max="1" step="0.05" value="1" title="Volume (Up / Down)">
+      <span id="name">__NAME__</span>
+      <span id="meta"></span>
+      <button class="txt" id="rate" title="Speed (&lt; &gt;)">1x</button>
+      <button class="ic" id="loop" title="Loop (R)">&#8635;</button>
+      <button class="ic" id="fs" title="Fullscreen (F)">&#9974;</button>
+      <button class="ic" id="helpbtn" title="Keyboard shortcuts (?)">?</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var KIND = "__KIND__", SRC = "__SRC__", FPS = __FPS__, EXT = "__EXT__", TEST = __TEST__;
+  var RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+  var $ = function (id) { return document.getElementById(id); };
+  var v = $("v"), img = $("img"), body = document.body;
+  var inApp = !!(window.ipc && window.ipc.postMessage);
+  var lastTick = 0, idleTimer = 0, dragging = false, fsOn = false, toastTimer = 0;
+
+  function fmt(t, frames) {
+    if (!isFinite(t) || t < 0) t = 0;
+    var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t - h * 3600 - m * 60;
+    var sec = (s < 10 ? "0" : "") + s.toFixed(2);
+    return (h ? h + ":" + (m < 10 ? "0" : "") + m : m) + ":" + sec;
+  }
+  function toast(text) {
+    var t = $("toast"); t.textContent = text; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 900);
+  }
+  function store(k, val) { try { localStorage.setItem("hfr." + k, String(val)); } catch (e) {} }
+  function load(k, d) { try { var x = localStorage.getItem("hfr." + k); return x === null ? d : x; } catch (e) { return d; } }
+
+  function showError(h, p) {
+    $("errh").textContent = h; $("errp").textContent = p; $("err").classList.add("show");
+    $("spin").classList.remove("show"); $("big").classList.remove("show");
+  }
+
+  if (KIND === "image") {
+    // A GIF: an animated picture, no transport controls.
+    img.src = SRC;
+    img.onerror = function () { showError("This file can't be previewed", "The picture could not be loaded. Check the connection to the VPS, or download the file instead."); };
+    $("bar").style.display = "none";
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeWindow(); });
+    return;
+  }
+
+  function seekTo(t) {
+    if (!isFinite(v.duration)) return;
+    v.currentTime = Math.min(Math.max(0, t), v.duration);
+    paint();
+  }
+  function skip(d) { seekTo(v.currentTime + d); toast((d > 0 ? "+" : "") + d + " s"); }
+  function toggle() { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause(); }
+  function step(dir) { v.pause(); seekTo(v.currentTime + dir / FPS); toast((dir > 0 ? "Next" : "Previous") + " frame"); }
+  function setRate(r) { v.playbackRate = r; store("rate", r); $("rate").textContent = r + "x"; toast("Speed " + r + "x"); }
+  function stepRate(dir) {
+    var i = RATES.indexOf(v.playbackRate); if (i < 0) i = RATES.indexOf(1);
+    setRate(RATES[Math.min(RATES.length - 1, Math.max(0, i + dir))]);
+  }
+  function setVol(x) {
+    x = Math.min(1, Math.max(0, x)); v.volume = x; if (x > 0) v.muted = false;
+    $("vol").value = x; store("vol", x); icons(); toast("Volume " + Math.round(x * 100) + "%");
+  }
+  function mute() { v.muted = !v.muted; icons(); toast(v.muted ? "Muted" : "Sound on"); }
+  function loop() { v.loop = !v.loop; $("loop").classList.toggle("on", v.loop); toast(v.loop ? "Loop on" : "Loop off"); paint(); }
+  function closeWindow() { if (inApp) window.ipc.postMessage("close"); else window.close(); }
+  function toggleFs() {
+    if (inApp) { window.ipc.postMessage("fullscreen"); }
+    else if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  }
+  window.__fs = function (on) { fsOn = !!on; $("fs").classList.toggle("on", fsOn); paint(); };
+  document.addEventListener("fullscreenchange", function () { window.__fs(!!document.fullscreenElement); });
+
+  function icons() {
+    $("play").innerHTML = v.paused ? "&#9654;" : "&#10074;&#10074;";
+    $("mute").innerHTML = (v.muted || v.volume === 0) ? "&#128263;" : "&#128266;";
+    body.classList.toggle("playing", !v.paused);
+    $("big").classList.toggle("show", v.paused && !v.ended && !$("err").classList.contains("show") && v.readyState >= 1);
+  }
+  function paint() {
+    var d = v.duration, t = v.currentTime, f = isFinite(d) && d > 0 ? t / d : 0;
+    $("pos").style.width = (f * 100) + "%"; $("knob").style.left = (f * 100) + "%";
+    $("time").textContent = fmt(t) + " / " + fmt(d);
+    var b = $("buf"); b.innerHTML = "";
+    if (isFinite(d) && d > 0) for (var i = 0; i < v.buffered.length; i++) {
+      var s = document.createElement("span");
+      s.style.left = (v.buffered.start(i) / d * 100) + "%";
+      s.style.width = ((v.buffered.end(i) - v.buffered.start(i)) / d * 100) + "%";
+      b.appendChild(s);
+    }
+    if (TEST) document.title = "t=" + t.toFixed(2) + " " + (v.paused ? "paused" : "playing") + " x" + v.playbackRate + (fsOn ? " fs" : "") + (v.muted ? " muted" : "") + " vol=" + v.volume.toFixed(2) + (v.loop ? " loop" : "") + ($("err").classList.contains("show") ? " error" : "");
+  }
+
+  // --- seek bar ---------------------------------------------------------------------------------
+  var seek = $("seek");
+  function fracAt(ev) { var r = seek.getBoundingClientRect(); return Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)); }
+  seek.addEventListener("pointerdown", function (ev) { dragging = true; seek.setPointerCapture(ev.pointerId); seekTo(fracAt(ev) * v.duration); });
+  seek.addEventListener("pointermove", function (ev) {
+    var f = fracAt(ev), tip = $("tip"); tip.style.display = "block"; tip.style.left = (f * 100) + "%"; tip.textContent = fmt(f * v.duration);
+    if (dragging) seekTo(f * v.duration);
+  });
+  seek.addEventListener("pointerup", function () { dragging = false; });
+  seek.addEventListener("pointerleave", function () { $("tip").style.display = "none"; });
+
+  // --- buttons ---------------------------------------------------------------------------------
+  $("play").onclick = toggle; $("big").onclick = toggle; v.onclick = toggle;
+  v.ondblclick = toggleFs;
+  $("back").onclick = function () { skip(-5); }; $("fwd").onclick = function () { skip(5); };
+  $("mute").onclick = mute; $("loop").onclick = loop; $("fs").onclick = toggleFs;
+  $("rate").onclick = function () { var i = RATES.indexOf(v.playbackRate); setRate(RATES[(i < 0 ? 3 : i + 1) % RATES.length]); };
+  $("rate").oncontextmenu = function (e) { e.preventDefault(); stepRate(-1); };
+  $("vol").oninput = function () { v.volume = parseFloat(this.value); v.muted = false; store("vol", this.value); icons(); };
+  $("helpbtn").onclick = function () { $("help").classList.toggle("show"); };
+  $("retry").onclick = function () { $("err").classList.remove("show"); v.load(); };
+
+  // --- keyboard --------------------------------------------------------------------------------
+  document.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key, handled = true;
+    if (k === " " || k === "k" || k === "K") toggle();
+    else if (k === "ArrowRight") skip(e.shiftKey ? 1 : 5);
+    else if (k === "ArrowLeft") skip(e.shiftKey ? -1 : -5);
+    else if (k === "l" || k === "L") skip(10);
+    else if (k === "j" || k === "J") skip(-10);
+    else if (k === ".") step(1);
+    else if (k === ",") step(-1);
+    else if (k === "ArrowUp") setVol(v.volume + 0.05);
+    else if (k === "ArrowDown") setVol(v.volume - 0.05);
+    else if (k === "m" || k === "M") mute();
+    else if (k === ">") stepRate(1);
+    else if (k === "<") stepRate(-1);
+    else if (k === "Home") { seekTo(0); toast("Start"); }
+    else if (k === "End") { seekTo(v.duration); toast("End"); }
+    else if (k >= "0" && k <= "9") { seekTo(v.duration * (parseInt(k, 10) / 10)); toast(k + "0%"); }
+    else if (k === "r" || k === "R") loop();
+    else if (k === "f" || k === "F") toggleFs();
+    else if (k === "?" || k === "h" || k === "H") $("help").classList.toggle("show");
+    else if (k === "Escape") { if ($("help").classList.contains("show")) $("help").classList.remove("show"); else if (fsOn) toggleFs(); else closeWindow(); }
+    else handled = false;
+    if (handled) e.preventDefault();
+    wake();
+  });
+  function wake() { body.classList.remove("idle"); clearTimeout(idleTimer); idleTimer = setTimeout(function () { body.classList.add("idle"); }, 2500); }
+  document.addEventListener("mousemove", wake);
+
+  // --- media events ----------------------------------------------------------------------------
+  v.addEventListener("loadedmetadata", function () {
+    $("meta").textContent = (v.videoWidth ? v.videoWidth + "x" + v.videoHeight : "") + (v.videoWidth ? "  " : "") + fmt(v.duration);
+    paint(); icons();
+  });
+  v.addEventListener("waiting", function () { $("spin").classList.add("show"); });
+  v.addEventListener("playing", function () { $("spin").classList.remove("show"); icons(); });
+  v.addEventListener("canplay", function () { $("spin").classList.remove("show"); icons(); });
+  v.addEventListener("seeked", paint);
+  v.addEventListener("ratechange", paint);
+  v.addEventListener("volumechange", paint);
+  v.addEventListener("progress", paint);
+  v.addEventListener("pause", icons); v.addEventListener("play", icons); v.addEventListener("ended", icons);
+  v.addEventListener("timeupdate", function () { var n = Date.now(); if (n - lastTick > 100) { lastTick = n; paint(); } });
+  v.addEventListener("error", function () {
+    var e = v.error, code = e ? e.code : 0;
+    if (code === 4) {
+      showError("This file can't be previewed",
+        "This computer's built-in player cannot decode ." + EXT + " files made this way (for example ProRes in a MOV, or some HEVC). The file itself is fine: download it and open it in a video player.");
+    } else if (code === 2) {
+      showError("Lost the connection to the VPS", "The video stopped loading. Check that the connection to your VPS is up, then try again.");
+    } else {
+      showError("The video could not be played", (e && e.message) ? e.message : "The file may be incomplete or damaged. Try again, or download it.");
+    }
+    paint();
+  });
+
+  // --- start -----------------------------------------------------------------------------------
+  var vol = parseFloat(load("vol", "1")); if (isFinite(vol)) { v.volume = Math.min(1, Math.max(0, vol)); $("vol").value = v.volume; }
+  var rate = parseFloat(load("rate", "1")); if (RATES.indexOf(rate) >= 0) { v.playbackRate = rate; $("rate").textContent = rate + "x"; }
+  v.src = SRC;
+  var p = v.play(); if (p && p.catch) p.catch(function () { icons(); });
+  icons(); wake(); v.focus();
+})();
+</script>
+</body>
+</html>

@@ -29,6 +29,10 @@ main = true
 [[binaries]]
 path = "hfr"
 
+# The window that plays a render streamed from the VPS (uses the system WebView).
+[[binaries]]
+path = "hfr-player"
+
 # The Linux agents that `hfr setup` uploads to the VPS.
 [[resources]]
 src = "dist/agents/x86_64-unknown-linux-musl/hfr-agent"
@@ -41,3 +45,7 @@ target = "agents/aarch64-unknown-linux-musl/hfr-agent"
 [nsis]
 installer-icon = "assets/branding/icon.ico"
 installer-mode = "currentUser"
+
+[deb]
+# The player window uses the system WebView.
+depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0"]

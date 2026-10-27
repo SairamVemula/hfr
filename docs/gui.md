@@ -69,6 +69,32 @@ The breadcrumb (*Projects › name*) takes you back. The header shows the size, 
 
 Composition (only when the project has other HTML files), frame rate, quality, format, colour range (auto / HDR / SDR), **resolution** (the composition's own size, or 1080p / 4K in landscape, portrait or square; the shape must match the composition and it cannot be combined with forced HDR, which the dialog points out) and parallel workers (with a hint about the VPS's cores and RAM). Every field starts at Hyperframes' default. A live line shows the exact command that will run.
 
+## Playing a render on the VPS
+
+Every video file has a **Play** button next to Download. It opens a player window and **streams the file from the VPS**: nothing is downloaded or saved first, and you can jump anywhere without waiting for the whole file. Use it to check a render before you spend time and disk space downloading it (or deleting it).
+
+<p align="center">
+  <img src="images/player.png" alt="The player window streaming a render from the VPS" width="80%">
+</p>
+
+The player has the usual controls (play/pause, a seek bar that shows what is buffered, volume, speed, loop, fullscreen) and keyboard shortcuts:
+
+| Key | Action |
+| --- | --- |
+| `Space` or `K` | Play / pause (also a click on the picture) |
+| `Left` / `Right` | Back / forward 5 seconds (`Shift` for 1 second, `J` / `L` for 10) |
+| `,` / `.` | Previous / next single frame (uses the render's frame rate) |
+| `Up` / `Down`, `M` | Volume, mute |
+| `<` / `>` | Slower / faster (0.25x to 2x) |
+| `0`-`9`, `Home`, `End` | Jump to 0%-90%, the start, the end |
+| `R`, `F` (or double-click) | Loop, fullscreen |
+| `?` | Show the shortcuts |
+| `Esc` | Close help, leave fullscreen, then close the window |
+
+GIFs open as an animated picture. The picture is decoded by your computer's built-in web player, so it plays what a browser can: H.264/AAC MP4 and VP9 WebM play; **MOV (ProRes) and some HEVC files cannot be previewed**, and the window says so and suggests downloading. HDR is shown tone-mapped, not as authored. Playing a 4K file over a slow connection streams at that connection's speed.
+
+If the player window cannot start (the system web view is missing, for example Windows 10 without WebView2), the preview opens in your default browser instead. How it works and why it is safe: [architecture.md](architecture.md#previewing-a-render) and [security.md](security.md#preview).
+
 ## Deleting
 
 Every delete opens a dialog that says exactly what will be removed and from where, with the safe choice (**Keep it**) first and highlighted:

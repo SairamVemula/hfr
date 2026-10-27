@@ -87,6 +87,18 @@ It should not: cancel stops the whole process group (SIGTERM, then SIGKILL after
 
 Current agents save every project and render to disk and restore them on start; a render that was running at that moment is shown as failed. Folders from agents older than the metadata format are not restored; the files are still in `/var/lib/hfr/jobs/` and can be copied out with `scp`.
 
+## Play: "This file can't be previewed"
+
+The player uses the web view built into your computer, so it can only play what a browser can: H.264/AAC MP4 and VP9 WebM work, **MOV with ProRes and some HEVC files do not**. Download the file and open it in a video player (or render as MP4/WebM). The window also reports a lost connection to the VPS, with **Try again**.
+
+## Play opens my browser instead of a window
+
+The player window needs the system web view: **WebView2** on Windows (included in Windows 11; on Windows 10 install the "Evergreen" runtime from Microsoft), WebKitGTK on Linux (`libwebkit2gtk-4.1`), nothing extra on macOS. Without it HFR falls back to your default browser. If `hfr-player` is missing from the install folder, reinstall the app.
+
+## The preview stutters or seeks slowly
+
+It streams the original file at your connection's speed, so a multi-GB 4K file over a slow link will stall. Wait for the buffer (the lighter bar on the seek bar), or download the file instead.
+
 ## Disk is filling up
 
 `hfr projects` shows each project's size; delete what you no longer need with `hfr rm project <project>`, a single render with `hfr rm job <job>` or one video with `hfr rm file <job> <file>`. `hfr status` shows free space. The app's *Free VPS space after download* setting (and `hfr pull --delete`) removes each file right after a verified download.

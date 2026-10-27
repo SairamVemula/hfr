@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/proto", "crates/agent", "crates/core", "crates/cli", "crates/gui"]
+members = ["crates/proto", "crates/agent", "crates/core", "crates/cli", "crates/gui", "crates/player"]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
