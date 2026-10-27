@@ -3481,7 +3481,7 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "hfr-agent"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -3502,7 +3502,7 @@ dependencies = [
 
 [[package]]
 name = "hfr-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -3515,7 +3515,7 @@ dependencies = [
 
 [[package]]
 name = "hfr-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -3540,7 +3540,7 @@ dependencies = [
 
 [[package]]
 name = "hfr-gui"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -3554,7 +3554,7 @@ dependencies = [
 
 [[package]]
 name = "hfr-player"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "png 0.17.16",
  "tao",
@@ -3564,7 +3564,7 @@ dependencies = [
 
 [[package]]
 name = "hfr-proto"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde",
  "serde_json",
