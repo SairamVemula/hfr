@@ -65,7 +65,7 @@ Output lands in `dist/installers/`. Installers include both binaries and the two
 
 ### Releasing
 
-Tag and push: `git tag v0.1.4 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
+Tag and push: `git tag v0.1.5 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
 
 ## Testing the preview player
 
