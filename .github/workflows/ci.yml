@@ -1,8 +1,9 @@
 name: ci
 on:
   push:
-    # Branches only: pushing a release tag runs the `release` workflow, and the same commit was just checked on main.
-    branches: ["**"]
+    # Only main: other branches are checked by their pull request (running on both would test every commit twice),
+    # and a release tag runs the `release` workflow instead.
+    branches: [main]
     # Nothing here can break the build, so do not spend runner time on it.
     paths-ignore:
       - "**.md"
