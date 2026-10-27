@@ -89,6 +89,9 @@ Shows or sets how many renders the VPS runs at the same time. `auto` (the defaul
 ### `hfr cancel <job>`
 Stop a running render, or take a waiting one out of the queue (it never starts). The agent stops the whole process tree (npx, node, Chrome workers, ffmpeg), the render becomes **cancelled**, and the project stays on the VPS so you can render it again without uploading. Cancelling a render that is not running returns an error.
 
+### `hfr play <job> [file]`
+Watch an output file straight from the VPS in a player window (streamed, nothing is saved). Without `file` it plays the first video of the render. Keyboard shortcuts are listed in [gui.md](gui.md#playing-a-render-on-the-vps). Close the window to stop; if the window cannot start it opens your browser and waits for Ctrl+C.
+
 ### `hfr pull <job> [file] [-o <dir>] [--delete]`
 Download the files of a render (all of them, or one by name or path) into `-o` (default: the current folder). Shows `Downloading  62%  1.2 GB of 2.0 GB  38.0 MB/s  ETA 21s`. Each file is written as `*.hfrpart` with a small sidecar; if the connection drops or you press Ctrl+C, run the same command again and it **resumes** where it stopped. The finished file's SHA-256 is compared with the agent's before it is renamed into place. An existing file is never overwritten: the new one becomes `name (1).mp4`. With `--delete` each file is removed from the VPS only after it was verified.
 

@@ -74,6 +74,10 @@ hfr render <dir> --like <job> --quality delivery --fps 60 # a NEW render in the 
 - **Only cancel a render the user asked you to.** A cancelled render loses its progress, and the VPS may be running the user's other renders; check `hfr jobs --json` and never touch a render you did not start.
 - A render that was running when the agent restarted shows as `failed`; render again to retry.
 
+## Previewing a render
+
+`hfr play <job> [file]` streams an output file from the VPS into a player window (no download, nothing saved); the app has a **Play** button on each video. Offer it before downloading when the user wants to check a render, and before deleting one. It opens a window on the user's screen, so only run it when they asked. MOV/ProRes and some HEVC cannot be previewed (the window says so); MP4 (H.264) and WebM play.
+
 ## Getting the result (and freeing space)
 
 ```bash

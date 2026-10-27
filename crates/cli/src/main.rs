@@ -145,6 +145,12 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Watch an output file straight from the VPS in a player window (streamed; nothing is saved here).
+    Play {
+        job: String,
+        /// Which file (name or path); default: the first video of the render.
+        file: Option<String>,
+    },
     /// Download a render's files (verified; resumes if interrupted; never overwrites).
     Pull {
         job: String,
@@ -644,6 +650,37 @@ async fn run(cmd: Cmd) -> Result<()> {
             let (p, j) = find_job(&all, &job)?;
             c.cancel_job(&p.project.id, &j.id).await?;
             println!("cancelling render {}", short(&j.id));
+        }
+        Cmd::Play { job, file } => {
+            let all = c.overview().await?;
+            let (p, j) = find_job(&all, &job)?;
+            let f = match &file {
+                Some(w) => j
+                    .files
+                    .iter()
+                    .find(|f| f.path == *w || f.name == *w)
+                    .with_context(|| format!("this render has no file `{w}` (see `hfr files {}`)", short(&j.id)))?,
+                None => {
+                    j.files.iter().find(|f| hfr_core::preview::previewable(&f.name)).context("this render has no video file to play")?
+                }
+            };
+            let fps = RenderOptions::from_command(&j.command).fps.unwrap_or(30);
+            let title = format!("{} - {}", f.name, p.project.name);
+            let (pid, jid, f) = (p.project.id.clone(), j.id.clone(), f.clone());
+            let server = hfr_core::preview::PreviewServer::start().await?;
+            let url = server.open(Arc::new(c), &pid, &jid, &f, &title, fps);
+            match hfr_core::preview::launch(&url, &title).await? {
+                hfr_core::preview::Launched::Window(mut child) => {
+                    println!("playing {} (close the window to stop)", f.name);
+                    let _ = child.wait().await;
+                }
+                hfr_core::preview::Launched::Browser => {
+                    println!("playing {} in your browser: {url}", f.name);
+                    println!("streaming from the VPS; press Ctrl+C when you are done");
+                    let _ = tokio::signal::ctrl_c().await;
+                }
+            }
+            server.close(&url);
         }
         Cmd::Queue { json } => {
             let all = c.overview().await?;

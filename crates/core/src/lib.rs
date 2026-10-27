@@ -4,6 +4,7 @@
 pub mod client;
 pub mod config;
 pub mod download;
+pub mod preview;
 pub mod registry;
 pub mod render;
 pub mod setup;

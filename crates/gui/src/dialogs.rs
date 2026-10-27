@@ -439,6 +439,59 @@ impl HfrApp {
 
     // ---- starting things ----------------------------------------------------------------------------
 
+    /// Plays an output file straight from the VPS in the player window (streamed, nothing is saved on this computer).
+    pub(crate) fn open_preview(
+        &mut self,
+        project_name: String,
+        pid: String,
+        jid: String,
+        file: OutputFile,
+        fps: u32,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(client) = self.client.clone() else { return };
+        let rt = self.rt.clone();
+        let existing = self.preview.clone();
+        self.status = format!("Opening {}...", file.name);
+        cx.spawn(async move |this, cx| {
+            let name = file.name.clone();
+            let out = rt
+                .spawn(async move {
+                    let server = match existing {
+                        Some(s) => s,
+                        None => hfr_core::preview::PreviewServer::start().await?,
+                    };
+                    let title = format!("{} - {}", file.name, project_name);
+                    let url = server.open(client, &pid, &jid, &file, &title, fps);
+                    let launched = hfr_core::preview::launch(&url, &title).await?;
+                    let in_browser = matches!(launched, hfr_core::preview::Launched::Browser);
+                    if let hfr_core::preview::Launched::Window(mut child) = launched {
+                        // The session ends with the window.
+                        let (server, url) = (server.clone(), url.clone());
+                        tokio::spawn(async move {
+                            let _ = child.wait().await;
+                            server.close(&url);
+                        });
+                    }
+                    Ok::<_, anyhow::Error>((server, in_browser))
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                match out {
+                    Ok(Ok((server, in_browser))) => {
+                        s.preview = Some(server);
+                        s.status = if in_browser { format!("Playing {name} in your browser") } else { format!("Playing {name}") };
+                    }
+                    Ok(Err(e)) => s.status = format!("Could not open the preview: {e}"),
+                    Err(e) => s.status = format!("Could not open the preview: {e}"),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     /// Syncs the project's local folder (only changes are sent).
     pub(crate) fn sync_project_now(&mut self, pid: String, cx: &mut Context<Self>) {
         let Some(name) = self.project(&pid).map(|p| p.project.name.clone()) else { return };

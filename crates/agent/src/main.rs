@@ -45,6 +45,10 @@ pub struct Inner {
     pub max_jobs: Option<u32>,
     /// What automatic mode picks for this machine.
     pub auto_max: u32,
+    /// Arrival order of queued jobs. `created_unix` has one-second resolution, so two renders queued within the
+    /// same second would otherwise swap places at random.
+    pub queue_seq: HashMap<String, u64>,
+    pub next_seq: u64,
 }
 
 impl Inner {
@@ -55,7 +59,7 @@ impl Inner {
     /// Queued jobs in the order they will be started: oldest first.
     pub fn queue_order(&self) -> Vec<String> {
         let mut q: Vec<&Job> = self.jobs.values().filter(|j| j.state == JobState::Queued).collect();
-        q.sort_by(|a, b| (a.created_unix, &a.id).cmp(&(b.created_unix, &b.id)));
+        q.sort_by_key(|j| (self.queue_seq.get(&j.id).copied().unwrap_or(u64::MAX), j.created_unix, j.id.clone()));
         q.into_iter().map(|j| j.id.clone()).collect()
     }
 
@@ -258,10 +262,26 @@ async fn main() {
     // A saved choice wins; HFR_MAX_JOBS only sets the starting value on a machine that has none yet.
     let max_jobs = store::load_settings(&root)
         .or_else(|| std::env::var("HFR_MAX_JOBS").ok().and_then(|v| v.parse().ok()).filter(|n| (1..=MAX_CONCURRENT_LIMIT).contains(n)));
-    let mut inner =
-        Inner { projects: HashMap::new(), jobs: HashMap::new(), logs: HashMap::new(), cancel_tx: HashMap::new(), max_jobs, auto_max };
+    let mut inner = Inner {
+        projects: HashMap::new(),
+        jobs: HashMap::new(),
+        logs: HashMap::new(),
+        cancel_tx: HashMap::new(),
+        max_jobs,
+        auto_max,
+        queue_seq: HashMap::new(),
+        next_seq: 0,
+    };
     for rec in loaded.projects {
         inner.projects.insert(rec.project.id.clone(), rec);
+    }
+    // Waiting renders from before a restart keep their relative order (oldest first).
+    let mut waiting: Vec<(u64, String)> =
+        loaded.jobs.iter().filter(|j| j.state == JobState::Queued).map(|j| (j.created_unix, j.id.clone())).collect();
+    waiting.sort();
+    for (_, id) in waiting {
+        inner.queue_seq.insert(id, inner.next_seq);
+        inner.next_seq += 1;
     }
     for job in loaded.jobs {
         inner.logs.insert(job.id.clone(), broadcast::channel(1024).0);
@@ -285,4 +305,47 @@ async fn main() {
     let l = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("hfr-agent {} (api {API_VERSION}) listening on {addr}", env!("CARGO_PKG_VERSION"));
     axum::serve(l, router(app)).await.unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn queued(id: &str, created: u64) -> Job {
+        Job {
+            id: id.into(),
+            project_id: "p".into(),
+            state: JobState::Queued,
+            command: vec![],
+            created_unix: created,
+            started_unix: None,
+            finished_unix: None,
+            files: vec![],
+            queue_position: None,
+        }
+    }
+
+    #[test]
+    fn jobs_queued_in_the_same_second_keep_their_arrival_order() {
+        let mut g = Inner {
+            projects: HashMap::new(),
+            jobs: HashMap::new(),
+            logs: HashMap::new(),
+            cancel_tx: HashMap::new(),
+            max_jobs: None,
+            auto_max: 1,
+            queue_seq: HashMap::new(),
+            next_seq: 0,
+        };
+        // Ids chosen so that sorting by id alone would reverse the order.
+        for id in ["zzz", "mmm", "aaa"] {
+            g.queue_seq.insert(id.into(), g.next_seq);
+            g.next_seq += 1;
+            g.jobs.insert(id.into(), queued(id, 1000));
+        }
+        assert_eq!(g.queue_order(), ["zzz", "mmm", "aaa"]);
+        assert_eq!(g.view(&g.jobs["aaa"].clone()).queue_position, Some(3));
+        g.jobs.get_mut("zzz").unwrap().state = JobState::Running;
+        assert_eq!(g.queue_order(), ["mmm", "aaa"]);
+    }
 }

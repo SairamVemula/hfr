@@ -50,7 +50,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-x11-dev libxkbcommon-dev libwayland-dev libx11-xcb-dev \
-            libxcb1-dev libxcb-xkb-dev libfontconfig-dev libvulkan-dev libasound2-dev pkg-config
+            libxcb1-dev libxcb-xkb-dev libfontconfig-dev libvulkan-dev libasound2-dev pkg-config \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
       - name: Build and stage the Linux agents (bundled so `hfr setup` works offline)
         shell: bash
         run: bash scripts/stage-agents.sh
@@ -61,7 +62,7 @@ jobs:
           for f in dist/agents/*/hfr-agent; do
             grep -q "hfr-agent-api=$api" "$f" || { echo "$f is stale (needs hfr-agent-api=$api)"; exit 1; }
           done
-      - run: cargo build --release -p hfr-cli -p hfr-gui
+      - run: cargo build --release -p hfr-cli -p hfr-gui -p hfr-player
       - run: cargo install cargo-packager --locked
       - run: cargo packager --release -c Packager.toml --formats ${{ matrix.formats }}
       # A draft: the app only sees a release once it is signed and published by the job below.

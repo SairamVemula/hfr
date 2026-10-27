@@ -65,7 +65,11 @@ Output lands in `dist/installers/`. Installers include both binaries and the two
 
 ### Releasing
 
-Tag and push: `git tag v0.1.3 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
+Tag and push: `git tag v0.1.4 && git push --tags`. `.github/workflows/release.yml` builds installers on Windows, macOS and Linux and attaches them to a GitHub release. `.github/workflows/ci.yml` builds and tests on all three OSes for every push.
+
+## Testing the preview player
+
+`cargo test -p hfr-core preview` covers the proxy (ranges, the token never reaching the page, wrong secret/host/method, one session = one file). For the real thing, generate clips with any ffmpeg (H.264 with and without `faststart`, VP9 WebM, ProRes MOV, a GIF, a 4K clip), run the local agent rig with a fake `npx` that copies them into `renders/`, and `hfr play <job> <file>`. With `HFR_PLAYER_TEST=1` the page mirrors its state (`t=3.31 playing x1 vol=1.00 ...`) into the window title, so a script can send keys with `SendKeys` and read the result from `MainWindowTitle`. Debug builds also honour `HFR_PLAYER_BIN` (use another player program), `HFR_NO_PLAYER=1` (force the browser) and `HFR_TEST_BROWSER_FILE=<file>` (record the browser address instead of opening a browser).
 
 ## Releasing and updates
 
@@ -116,6 +120,9 @@ crates/gui/src/dialogs.rs      render options, confirmations, new project
 crates/gui/src/transfers.rs    uploads, downloads, transfer bar and page
 crates/gui/src/pages.rs        VPS and settings pages
 crates/gui/src/theme.rs        palette and gpui-kit theme overrides
+crates/core/src/preview.rs     loopback preview server (streams a render with the token kept out), player launcher
+crates/core/src/player.html    the player page (controls and keyboard shortcuts)
+crates/player/src/main.rs      hfr-player: tao window + system WebView (exit 3 = WebView unavailable)
 scripts/e2e-agent.sh           API checks against a Linux agent binary (fake npx)
 ```
 

@@ -180,6 +180,8 @@ struct HfrApp {
     update: updates::UpdateUi,
     /// Version of the agent on the VPS, once connected.
     agent_version: Option<String>,
+    /// The loopback server that streams previews (started the first time a file is played).
+    preview: Option<hfr_core::preview::PreviewServer>,
     /// The render limit and the queue's size, from the agent (API 3).
     queue: Option<hfr_proto::Settings>,
     queue_status: Option<hfr_proto::Status>,
@@ -230,6 +232,7 @@ impl HfrApp {
             dialog: None,
             update: updates::UpdateUi::new(),
             agent_version: None,
+            preview: None,
             queue: None,
             queue_status: None,
             agent_banner_hidden: false,

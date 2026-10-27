@@ -511,7 +511,7 @@ impl HfrApp {
                 .h_flex()
                 .items_center()
                 .gap_3()
-                .child(Icon::new(IconName::Play).size_4().text_color(theme::accent_text()))
+                .child(Icon::new(IconName::File).size_4().text_color(theme::accent_text()))
                 .child(
                     div()
                         .v_flex()
@@ -531,10 +531,22 @@ impl HfrApp {
         } else {
             let (a1, a2, a3, a4, a5) = (pid.clone(), p.project.name.clone(), jid.clone(), f.clone(), f.clone());
             let (b1, b2) = (pid.clone(), jid.clone());
+            let (v1, v2, v3, v4) = (pid.clone(), p.project.name.clone(), jid.clone(), f.clone());
+            let fps = RenderOptions::from_command(&job.command).fps.unwrap_or(30);
             row = row.child(
                 div()
                     .h_flex()
                     .gap_2()
+                    .when(hfr_core::preview::previewable(&f.name), |d| {
+                        d.child(
+                            Button::new(SharedString::from(format!("play-{}-{}", job.id, f.path)))
+                                .icon(Icon::new(IconName::Play))
+                                .label("Play")
+                                .on_click(
+                                    cx.listener(move |t, _, _, cx| t.open_preview(v2.clone(), v1.clone(), v3.clone(), v4.clone(), fps, cx)),
+                                ),
+                        )
+                    })
                     .child(
                         Button::new(SharedString::from(format!("dl-{}-{}", job.id, f.path)))
                             .primary()

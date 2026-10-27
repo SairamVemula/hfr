@@ -6,7 +6,7 @@
 #               cargo packager --release -c Packager.toml --formats appimage,deb   (Linux)
 name = "hfr-remote"
 product-name = "HFR"
-version = "0.1.3"
+version = "0.1.4"
 identifier = "dev.hfr.remote"
 description = "Render Hyperframes projects on your own VPS"
 long-description = "Push a Hyperframes project to your VPS, watch the render and the server's health live, download the verified video, and free the space - from a desktop app or the hfr command line."
@@ -29,6 +29,10 @@ main = true
 [[binaries]]
 path = "hfr"
 
+# The window that plays a render streamed from the VPS (uses the system WebView).
+[[binaries]]
+path = "hfr-player"
+
 # The Linux agents that `hfr setup` uploads to the VPS.
 [[resources]]
 src = "dist/agents/x86_64-unknown-linux-musl/hfr-agent"
@@ -41,3 +45,7 @@ target = "agents/aarch64-unknown-linux-musl/hfr-agent"
 [nsis]
 installer-icon = "assets/branding/icon.ico"
 installer-mode = "currentUser"
+
+[deb]
+# The player window uses the system WebView.
+depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0"]

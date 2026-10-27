@@ -71,6 +71,9 @@ pub async fn start_job(app: &App, pid: &str, command: Vec<String>) -> Res<Job> {
             queue_position: None,
         };
         g.logs.insert(id.clone(), broadcast::channel(1024).0);
+        let seq = g.next_seq;
+        g.next_seq += 1;
+        g.queue_seq.insert(id.clone(), seq);
         g.jobs.insert(id.clone(), job);
     }
     store::persist_job(app, &id).await;

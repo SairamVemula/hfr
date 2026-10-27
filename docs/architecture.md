@@ -77,6 +77,15 @@ Render options (`crates/core/src/render.rs`) are turned into the job's command (
 - **Which folder is which project:** `registry.rs` stores `projects.json` in the config folder, mapping a canonical local folder path to a project id. Two folders with the same name are two projects; picking a known folder again asks whether to sync it, render, open it or create a separate project.
 - **Download:** the client streams `GET file?path=...` into `<name>.hfrpart`, with a small sidecar (`.hfrpart.json`) recording the expected size and SHA-256. If it is interrupted or paused, the next attempt sends `Range: bytes=<part size>-` and continues. At the end the file is hashed and compared with the agent's checksum before it is renamed into place; a mismatch deletes the partial file and errors out. The final name never overwrites an existing file (`name (1).mp4`). Optionally the VPS copy is deleted afterwards, but only after a successful verification.
 
+## Previewing a render
+
+The agent already serves output files with `Range` support, so a video player can seek without downloading everything. A web page cannot send the agent's `Authorization` header (and the token must not reach a web page anyway), so the program that holds the SSH tunnel (the app, or the CLI for `hfr play`) runs a small server on a loopback port (`crates/core/src/preview.rs`):
+
+- `GET /s/<session>/` serves the player page (`player.html`: a `<video>` element with a custom control bar and keyboard shortcuts);
+- `GET /s/<session>/video` streams the file from the agent, forwarding the `Range` header and adding the token itself.
+
+Each opened file gets its own session with a random 256-bit secret in the path, and a session can only read the one file it was opened for. The player window is a **separate program**, `hfr-player` (`crates/player`: a `tao` window around the system WebView via `wry`), so the WebView's event loop never shares a thread with the app's UI, and the app keeps working without a WebView. It exits with code 3 when the WebView cannot start; the caller then opens the default browser. When the window closes its session is dropped; an idle session is forgotten after 10 minutes.
+
 ## Setup flow (`hfr-core::setup`)
 
 `ssh uname -m` picks the Rust target (`x86_64` or `aarch64`, musl), the matching agent binary is found (bundled with the app, or `target/<triple>/release`), uploaded with `scp`, and `install.sh` is piped over SSH (`bash -c "$(cat)"`, so no command in the script can swallow the rest of it from stdin). The script is idempotent and prints `HFR_TOKEN=...` last, which is saved locally and never echoed.
