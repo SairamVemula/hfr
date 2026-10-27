@@ -69,7 +69,6 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/installers/*
-          generate_release_notes: true
           draft: true
 
   # Signs the list of checksums with the update key and publishes the release. Installed apps verify this
@@ -98,6 +97,12 @@ jobs:
           cd ..
           cargo run -q -p hfr-core --example release_key -- sign release-files/SHA256SUMS release-files/SHA256SUMS.sig
           cargo run -q -p hfr-core --example release_key -- verify release-files/SHA256SUMS release-files/SHA256SUMS.sig
+      - name: Release notes from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > release-notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
       - name: Attach the signed checksums and publish
         env:
           GH_TOKEN: ${{ github.token }}
