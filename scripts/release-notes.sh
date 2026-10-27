@@ -13,20 +13,26 @@ if [ -z "$(printf '%s' "$section" | tr -d '[:space:]')" ]; then
   exit 1
 fi
 
+base="https://github.com/SairamVemula/hfr/releases/download/v$v"
+# A file name that downloads the file when clicked.
+dl() { printf '[`%s`](%s/%s)' "$1" "$base" "$1"; }
+
 printf "## What's new in %s\n%s\n\n" "$v" "$section"
 cat <<EOF
 ---
 
 ### Download
 
-| Your computer | File |
+| Your computer | Download |
 | --- | --- |
-| Windows (64-bit) | \`hfr-gui_${v}_x64-setup.exe\` |
-| Windows on ARM | \`hfr-gui_${v}_arm64-setup.exe\` |
-| macOS (Apple Silicon) | \`HFR_${v}_aarch64.dmg\` |
-| macOS (Intel) | \`HFR_${v}_x64.dmg\` |
-| Linux (64-bit) | \`hfr-gui_${v}_x86_64.AppImage\` or \`hfr-gui_${v}_amd64.deb\` |
-| Linux on ARM | \`hfr-gui_${v}_aarch64.AppImage\` or \`hfr-gui_${v}_arm64.deb\` |
+| Windows (64-bit) | $(dl "hfr-gui_${v}_x64-setup.exe") |
+| Windows on ARM | $(dl "hfr-gui_${v}_arm64-setup.exe") |
+| macOS (Apple Silicon) | $(dl "HFR_${v}_aarch64.dmg") |
+| macOS (Intel) | $(dl "HFR_${v}_x64.dmg") |
+| Linux (64-bit) | $(dl "hfr-gui_${v}_x86_64.AppImage") or $(dl "hfr-gui_${v}_amd64.deb") |
+| Linux on ARM | $(dl "hfr-gui_${v}_aarch64.AppImage") or $(dl "hfr-gui_${v}_arm64.deb") |
+
+Click a file name to download it. Checksums: $(dl "SHA256SUMS") (signed: $(dl "SHA256SUMS.sig")).
 
 ### Updating
 
