@@ -15,6 +15,23 @@ use tao::{
 };
 use wry::WebViewBuilder;
 
+/// The HFR icon, shown in the window's title bar and the taskbar.
+static ICON: &[u8] = include_bytes!("../../../assets/branding/icon-64.png");
+
+fn window_icon() -> Option<tao::window::Icon> {
+    let mut decoder = png::Decoder::new(ICON);
+    decoder.set_transformations(png::Transformations::EXPAND);
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).ok()?;
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => buf[..info.buffer_size()].to_vec(),
+        png::ColorType::Rgb => buf[..info.buffer_size()].chunks(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        _ => return None,
+    };
+    tao::window::Icon::from_rgba(rgba, info.width, info.height).ok()
+}
+
 /// Keep in step with `hfr_core::preview::PLAYER_EXIT_NO_WEBVIEW`.
 const EXIT_NO_WEBVIEW: i32 = 3;
 
@@ -67,6 +84,7 @@ fn main() {
         .with_title(&args.title)
         .with_inner_size(LogicalSize::new(args.width, args.height))
         .with_min_inner_size(LogicalSize::new(640.0, 400.0))
+        .with_window_icon(window_icon())
         .build(&event_loop)
     {
         Ok(w) => w,

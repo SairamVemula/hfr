@@ -3556,6 +3556,7 @@ dependencies = [
 name = "hfr-player"
 version = "0.1.3"
 dependencies = [
+ "png 0.17.16",
  "tao",
  "winresource",
  "wry",

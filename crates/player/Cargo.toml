@@ -9,6 +9,7 @@ description = "Small player window used by HFR to preview a render streamed from
 [dependencies]
 wry = "0.57"
 tao = "0.37"
+png = "0.17"
 
 [build-dependencies]
 winresource = "0.1"
